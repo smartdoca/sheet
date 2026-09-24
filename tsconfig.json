@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "strict": true,
+    "forceConsistentCasingInFileNames": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "paths": {
+      "@online-office/univer-sheet": ["./src/index.ts"],
+      "@online-office/univer-sheet/yjs": ["./src/yjs.ts"],
+      "@online-office/univer-sheet/model": ["./src/model.ts"],
+      "@online-office/univer-sheet/xlsx": ["./src/xlsx.ts"]
+    },
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx"
+  },
+  "include": ["src", "demo", "vite.config.ts", "tsup.config.ts"]
+}

@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+
+# Package and demo build output
+dist/
+dist-demo/
+*.tgz
+# Local release bundles and browser acceptance screenshots.
+# Keep release metadata in docs/RELEASE-HISTORY.md instead.
+/artifacts/
+
+# Test and coverage output (test source files should be committed)
+coverage/
+.nyc_output/
+*.lcov
+test-results/
+playwright-report/
+blob-report/
+
+# Tool caches
+.vite/
+.cache/
+.parcel-cache/
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
+
+# Logs and runtime files
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.pid
+*.pid.lock
+
+# Local environment files; keep a documented template
+.env
+.env.*
+!.env.example
+
+# Local editor and operating-system metadata
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Yarn Berry local state. Keep reusable project configuration if added later.
+.pnp.*
+.yarn/cache/
+.yarn/install-state.gz
+.yarn/unplugged/
