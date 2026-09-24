@@ -1,0 +1,103 @@
+{
+  "name": "@online-office/univer-sheet",
+  "version": "0.2.0-rc.16",
+  "description": "Embeddable React spreadsheet editor powered by Univer Sheets",
+  "type": "module",
+  "sideEffects": [
+    "*.css"
+  ],
+  "files": [
+    "dist",
+    "docs",
+    "examples",
+    "tests/comment-browser.cua.js",
+    "tests/toolbar-browser.cua.js",
+    "tests/office-browser.cua.js",
+    "tests/xlsx-browser.cua.js",
+    "tests/sheets-browser.cua.js",
+    "tests/inline-browser.cua.js",
+    "tests/features-browser.cua.js",
+    "tests/current-default-browser.cua.js"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./yjs": {
+      "types": "./dist/yjs.d.ts",
+      "import": "./dist/yjs.js",
+      "require": "./dist/yjs.cjs"
+    },
+    "./style.css": "./dist/index.css",
+    "./xlsx": {
+      "types": "./dist/xlsx.d.ts",
+      "import": "./dist/xlsx.js",
+      "require": "./dist/xlsx.cjs"
+    },
+    "./model": {
+      "types": "./dist/model.d.ts",
+      "import": "./dist/model.js",
+      "require": "./dist/model.cjs"
+    }
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && tsup",
+    "build:demo": "vite build",
+    "check": "tsc --noEmit",
+    "test": "vitest run",
+    "prepublishOnly": "yarn build"
+  },
+  "peerDependencies": {
+    "react": ">=18",
+    "react-dom": ">=18"
+  },
+  "dependencies": {
+    "@antv/g2": "^5.4.8",
+    "@univerjs/core": "0.25.1",
+    "@univerjs/sheets": "0.25.1",
+    "@univerjs/sheets-ui": "0.25.1",
+    "@univerjs/docs": "0.25.1",
+    "@univerjs/docs-ui": "0.25.1",
+    "@univerjs/engine-render": "0.25.1",
+    "@univerjs/ui": "0.25.1",
+    "@univerjs/preset-sheets-conditional-formatting": "0.25.1",
+    "@univerjs/preset-sheets-core": "0.25.1",
+    "@univerjs/preset-sheets-data-validation": "0.25.1",
+    "@univerjs/preset-sheets-drawing": "0.25.1",
+    "@univerjs/preset-sheets-filter": "0.25.1",
+    "@univerjs/preset-sheets-find-replace": "0.25.1",
+    "@univerjs/preset-sheets-hyper-link": "0.25.1",
+    "@univerjs/preset-sheets-note": "0.25.1",
+    "@univerjs/preset-sheets-sort": "0.25.1",
+    "@univerjs/preset-sheets-table": "0.25.1",
+    "@univerjs/presets": "0.25.1",
+    "exceljs": "^4.4.0",
+    "jszip": "3.10.1",
+    "saxes": "5.0.1",
+    "rxjs": "^7.8.2",
+    "y-indexeddb": "^9.0.12",
+    "y-protocols": "^1.0.7",
+    "yjs": "^13.6.32"
+  },
+  "devDependencies": {
+    "@types/react": "^19.1.0",
+    "@types/react-dom": "^19.1.0",
+    "@vitejs/plugin-react": "^4.4.1",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5",
+    "vitest": "^3.2.4"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}
