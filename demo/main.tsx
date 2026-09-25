@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useState } from 'react'
 import ReactDOM from 'react-dom/client'
 
 import {
@@ -21,11 +21,18 @@ const localPersistence: WorkbookPersistenceAdapter = {
 }
 
 function App() {
+  const [locale, setLocale] = useState('zh')
   return (
     <main className="uos-demo">
-      <nav className="uos-demo__nav"><a href="?acceptance=index">打开交互验收目录</a><span>隔离测试文档，不修改当前工作簿</span></nav>
+      <nav className="uos-demo__nav">
+        <a href="?acceptance=index">打开交互验收目录</a>
+        <span>隔离测试文档，不修改当前工作簿</span>
+        <button type="button" aria-pressed={locale === 'zh'} onClick={() => setLocale('zh')}>中文</button>
+        <button type="button" aria-pressed={locale === 'en'} onClick={() => setLocale('en')}>English</button>
+      </nav>
       <section className="uos-demo__frame">
         <SpreadsheetEditor
+          locale={locale}
           workbookId="demo-workbook"
           workbookName="示例工作簿"
           persistence={localPersistence}

@@ -1,9 +1,10 @@
 import { Component, useEffect, useState, type ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import type { SpreadsheetEditorHandle, SpreadsheetCellObject } from './types'
+import { createTranslator, type EditorTranslator } from './i18n'
 
 /** Geometry stays inside the package; the host only renders business identity/resources. */
-export function CellObjects({ handle, renderer }: { handle: SpreadsheetEditorHandle; renderer?: (object: SpreadsheetCellObject) => ReactNode }) {
+export function CellObjects({ handle, renderer, t }: { handle: SpreadsheetEditorHandle; renderer?: (object: SpreadsheetCellObject) => ReactNode; t?: EditorTranslator }) {
   const runtime = handle.getRuntime()
   const [items, setItems] = useState<{ key: string; object: SpreadsheetCellObject; rect: DOMRect }[]>([])
   useEffect(() => {
@@ -51,12 +52,13 @@ export function CellObjects({ handle, renderer }: { handle: SpreadsheetEditorHan
     return () => {sub?.dispose();cancelAnimationFrame(frame);window.removeEventListener('resize',schedule);window.removeEventListener('scroll',schedule,true)}
   }, [runtime, renderer])
   if (!renderer) return null
-  return createPortal(<div className="uos-cell-objects">{items.map(({ key, object, rect }) => <div key={key} data-cell-object={object.kind} style={{ position: 'fixed', left: rect.left + 2, top: rect.top + 2, width: object.kind === 'floating-image' ? object.width ?? 240 : rect.width - 4, height: object.kind === 'floating-image' ? object.height ?? 160 : rect.height - 4, zIndex: 6, overflow: 'hidden', background: '#fff', display: 'flex', alignItems: 'center', font: '13px sans-serif' }} onMouseDown={e => e.stopPropagation()}><ObjectFallback label={object.label}><ObjectView renderer={renderer} object={object} /></ObjectFallback></div>)}</div>, document.body)
+  const retry = (t ?? createTranslator())('object.retry')
+  return createPortal(<div className="uos-cell-objects">{items.map(({ key, object, rect }) => <div key={key} data-cell-object={object.kind} style={{ position: 'fixed', left: rect.left + 2, top: rect.top + 2, width: object.kind === 'floating-image' ? object.width ?? 240 : rect.width - 4, height: object.kind === 'floating-image' ? object.height ?? 160 : rect.height - 4, zIndex: 6, overflow: 'hidden', background: '#fff', display: 'flex', alignItems: 'center', font: '13px sans-serif' }} onMouseDown={e => e.stopPropagation()}><ObjectFallback label={object.label} retry={retry}><ObjectView renderer={renderer} object={object} /></ObjectFallback></div>)}</div>, document.body)
 }
 
 function ObjectView({renderer,object}:{renderer:(value:SpreadsheetCellObject)=>ReactNode;object:SpreadsheetCellObject}){return renderer(object)}
-class ObjectFallback extends Component<{label:string;children:ReactNode},{failed:boolean}> {
+class ObjectFallback extends Component<{label:string;retry:string;children:ReactNode},{failed:boolean}> {
   state={failed:false}
   static getDerivedStateFromError(){return {failed:true}}
-  render(){return this.state.failed ? <span>{this.props.label}<button type="button" onClick={()=>this.setState({failed:false})}>重试显示</button></span> : this.props.children}
+  render(){return this.state.failed ? <span>{this.props.label}<button type="button" onClick={()=>this.setState({failed:false})}>{this.props.retry}</button></span> : this.props.children}
 }

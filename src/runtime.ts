@@ -28,7 +28,9 @@ import UniverPresetSheetsSortEnUS from '@univerjs/preset-sheets-sort/locales/en-
 import { UniverSheetsTablePreset } from '@univerjs/preset-sheets-table'
 import UniverPresetSheetsTableZhCN from '@univerjs/preset-sheets-table/locales/zh-CN'
 import UniverPresetSheetsTableEnUS from '@univerjs/preset-sheets-table/locales/en-US'
+import { LocaleService } from '@univerjs/core'
 import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets'
+import { univerLocale } from './i18n'
 
 import type { SpreadsheetRuntimeFactory } from './types'
 import { createUniverImageIoService } from './resources'
@@ -67,17 +69,17 @@ const enUSLocale = mergeLocales(
 export const createDefaultSpreadsheetRuntime: SpreadsheetRuntimeFactory = ({
   container, workbookId, locale, languagePack, resourceAdapter, toolbarLayout, capabilities, initialRows = 220, initialColumns = 26,
 }) => {
-  const localeKey = locale === 'en-US' ? LocaleType.EN_US : locale === 'zh-CN' ? LocaleType.ZH_CN : locale
-  const baseLocale = locale === 'en-US' ? enUSLocale : zhCNLocale
+  const localeKey = univerLocale(locale) === 'en-US' ? LocaleType.EN_US : LocaleType.ZH_CN
   const drawingPreset = UniverSheetsDrawingPreset()
   if (resourceAdapter) drawingPreset.plugins = drawingPreset.plugins.map(entry => {
     if (Array.isArray(entry) && entry[0].pluginName === 'UNIVER_DRAWING_PLUGIN') return [entry[0], {...entry[1], override: [createUniverImageIoService(resourceAdapter, workbookId)]}] as typeof entry
     return entry
   })
   const runtime = createUniver({
-    locale: localeKey as LocaleType,
+    locale: localeKey,
     locales: {
-      [localeKey]: mergeLocales(baseLocale, languagePack?.univer ?? {}),
+      [LocaleType.ZH_CN]: mergeLocales(zhCNLocale, localeKey === LocaleType.ZH_CN ? languagePack?.univer ?? {} : {}),
+      [LocaleType.EN_US]: mergeLocales(enUSLocale, localeKey === LocaleType.EN_US ? languagePack?.univer ?? {} : {}),
     },
     override: resourceAdapter ? [createUniverImageIoService(resourceAdapter, workbookId)] : [],
     presets: [
@@ -141,5 +143,11 @@ export const createDefaultSpreadsheetRuntime: SpreadsheetRuntimeFactory = ({
     })
     signal.addEventListener('abort', abort, {once:true})
   })
-  return { ...runtime, whenRendered, get formatPainter(){return formatPainter},refreshInlineImages:(assetId?:string)=>refreshInlineImages(assetId), get nativeText(){return nativeText}, getUndoRedoState:()=>getUndoRedoState(), getTextFormatState:()=>getTextFormatState(), updateHostMenus: (...args: Parameters<typeof updateHostMenus>) => updateHostMenus(...args) } as unknown as ReturnType<SpreadsheetRuntimeFactory>
+  const applyLocale = (nextLocale: string, pack?: typeof languagePack) => {
+    const service = runtime.univer.__getInjector().get(LocaleService)
+    const key = univerLocale(nextLocale) === 'en-US' ? LocaleType.EN_US : LocaleType.ZH_CN
+    service.load({ [key]: mergeLocales(key === LocaleType.EN_US ? enUSLocale : zhCNLocale, pack?.univer ?? {}) })
+    if (service.getCurrentLocale() !== key) service.setLocale(key)
+  }
+  return { ...runtime, applyLocale, whenRendered, get formatPainter(){return formatPainter},refreshInlineImages:(assetId?:string)=>refreshInlineImages(assetId), get nativeText(){return nativeText}, getUndoRedoState:()=>getUndoRedoState(), getTextFormatState:()=>getTextFormatState(), updateHostMenus: (...args: Parameters<typeof updateHostMenus>) => updateHostMenus(...args) } as unknown as ReturnType<SpreadsheetRuntimeFactory>
 }
