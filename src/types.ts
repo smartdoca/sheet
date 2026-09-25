@@ -16,7 +16,7 @@ import type { XlsxOptions, XlsxExportResult } from './xlsxTypes'
 export type WorkbookSnapshot = IWorkbookData
 
 export type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error'
-export type SpreadsheetLocale = 'zh-CN' | 'en-US' | (string & {})
+export type SpreadsheetLocale = 'zh' | 'en' | 'zh-CN' | 'en-US' | (string & {})
 export type SpreadsheetToolbarLayout = 'simple' | 'classic' | 'collapsed' | 'two-row'
 /** Whole-cell object, serialized through the existing custom JSON register. */
 export interface SpreadsheetCellObject {
@@ -111,6 +111,8 @@ export interface SpreadsheetRuntime {
   getUndoRedoState?(): {canUndo:boolean;canRedo:boolean}
   refreshInlineImages?(assetId?:string):void
   formatPainter?:SpreadsheetFormatPainter
+  /** Switches Univer UI copy without recreating the workbook or plugins. */
+  applyLocale?(locale: string, languagePack?: SpreadsheetLanguagePack): void
 }
 
 export interface SpreadsheetFacade {

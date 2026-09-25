@@ -21,7 +21,7 @@ import {
   AnalysisChart,
 } from './AnalysisChart'
 import { createDefaultSpreadsheetRuntime } from './runtime'
-import { createTranslator } from './i18n'
+import { applyLegacyEditorOverrides, createTranslator, intlLocale, resolveLocale } from './i18n'
 import { downloadResourceResult } from './resources'
 import {isFormulaProjection} from './transactionOrigin'
 import { sanitizeWorkbookSnapshot } from './snapshot'
@@ -111,7 +111,10 @@ export interface SpreadsheetEditorProps {
   showInsertToolbar?: boolean
   /** Host-owned attachment workflow; no built-in attachment data model or upload. */
   onInsertAttachment?: (context: import('./types').SpreadsheetMenuActionContext) => void | Promise<void>
+  /** `zh` and `zh-*` use Chinese. Any other code uses English. Omitted stays Chinese. */
   locale?: SpreadsheetLocale
+  /** Replaces individual built-in message keys. Other keys stay on the built-in catalog. */
+  messages?: Record<string, string>
   languagePacks?: Record<string, SpreadsheetLanguagePack>
   runtimeFactory?: SpreadsheetRuntimeFactory
   /** `simple` flattens native categories; the separate insertion row stays visible. */
@@ -150,14 +153,14 @@ function toError(error: unknown): Error {
 }
 
 const CHART_TYPES: Array<{ type: AnalysisChartType; labelKey: string; icon: string }> = [
-  { type: 'column', labelKey: 'chartColumn', icon: '▥' },
-  { type: 'bar', labelKey: 'chartBar', icon: '▤' },
-  { type: 'line', labelKey: 'chartLine', icon: '⌁' },
-  { type: 'area', labelKey: 'chartArea', icon: '◩' },
-  { type: 'pie', labelKey: 'chartPie', icon: '◕' },
-  { type: 'donut', labelKey: 'chartDonut', icon: '◉' },
-  { type: 'scatter', labelKey: 'chartScatter', icon: '⠿' },
-  { type: 'radar', labelKey: 'chartRadar', icon: '◇' },
+  { type: 'column', labelKey: 'chart.column', icon: '▥' },
+  { type: 'bar', labelKey: 'chart.bar', icon: '▤' },
+  { type: 'line', labelKey: 'chart.line', icon: '⌁' },
+  { type: 'area', labelKey: 'chart.area', icon: '◩' },
+  { type: 'pie', labelKey: 'chart.pie', icon: '◕' },
+  { type: 'donut', labelKey: 'chart.donut', icon: '◉' },
+  { type: 'scatter', labelKey: 'chart.scatter', icon: '⠿' },
+  { type: 'radar', labelKey: 'chart.radar', icon: '◇' },
 ]
 
 // Excel-compatible hard limits. Actual worksheets start small and grow on demand.
@@ -244,14 +247,14 @@ function createChartData(
   t: (key: string, params?: Record<string, string | number>) => string,
 ): AnalysisChartData {
   if (matrix.length < 2 || matrix[0].length < 2) {
-    throw new Error(t('chartMinimum'))
+    throw new Error(t('chart.minimum'))
   }
 
-  const headers = matrix[0].map((value, index) => String(value ?? t('series', { number: index })))
+  const headers = matrix[0].map((value, index) => String(value ?? t('chart.series', { number: index })))
   const values: AnalysisChartDatum[] = []
 
   matrix.slice(1).forEach((row, rowIndex) => {
-    const category = String(row[0] ?? t('item', { number: rowIndex + 1 }))
+    const category = String(row[0] ?? t('chart.item', { number: rowIndex + 1 }))
     row.slice(1).forEach((cell, columnIndex) => {
       const value = toNumber(cell)
       if (value === null) return
@@ -270,7 +273,7 @@ function createChartData(
   const chartValues = type === 'scatter'
     ? values.filter((item) => item.x !== undefined)
     : values.filter((item) => item.x === undefined)
-  if (chartValues.length === 0) throw new Error(t('chartNoData'))
+  if (chartValues.length === 0) throw new Error(t('chart.noData'))
 
   return { ...meta, type, values: chartValues }
 }
@@ -304,7 +307,8 @@ export const SpreadsheetEditor = forwardRef<
     onPasteContent,
     toolbarEnd,
     inlineActions,
-    locale = 'zh-CN',
+    locale = 'zh',
+    messages,
     languagePacks,
     runtimeFactory = createDefaultSpreadsheetRuntime,
     toolbarLayout = 'two-row',
@@ -339,6 +343,7 @@ export const SpreadsheetEditor = forwardRef<
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cellImageInputRef = useRef<HTMLInputElement>(null)
   const runtimeRef = useRef<SpreadsheetRuntime | null>(null)
+  const refreshPackageMenusRef = useRef<() => void>(() => {})
   const importedSnapshotRef = useRef<WorkbookSnapshot | null>(null)
   const pendingImportRef = useRef(false)
   const sheetNameDraftRef = useRef('')
@@ -403,7 +408,7 @@ export const SpreadsheetEditor = forwardRef<
     if (capability && !capability.enabled) throw Object.assign(new Error(capability.reason), { code: capability.code })
   }, [])
   const operationDisabled = (operation: ExlsxOperation) => loading || readOnly || collaboration?.capabilities?.[operation]?.enabled === false
-  const operationReason = (operation: ExlsxOperation) => readOnly ? t('readOnly') : collaboration?.capabilities?.[operation]?.reason
+  const operationReason = (operation: ExlsxOperation) => readOnly ? t('mode.readOnly') : collaboration?.capabilities?.[operation]?.reason
   const effectiveResourceAdapter = useMemo<ResourceAdapter | undefined>(() => {
     if (!resourceAdapter && !onImageUpload) return undefined
     return {
@@ -458,8 +463,18 @@ export const SpreadsheetEditor = forwardRef<
   const [sheetNameError, setSheetNameError] = useState<string | null>(null)
   const [runtimeGeneration, setRuntimeGeneration] = useState(0)
   const [borderColor, setBorderColor] = useState('#000000')
-  const languagePack = languagePacks?.[locale]
-  const t = useMemo(() => createTranslator(locale, languagePack), [languagePack, locale])
+  const languagePack = languagePacks?.[locale] ?? languagePacks?.[resolveLocale(locale)]
+  const t = useMemo(() => createTranslator(locale, { ...applyLegacyEditorOverrides(languagePack?.editor), ...messages }), [languagePack, locale, messages])
+  const tRef = useRef(t)
+  tRef.current = t
+  const localeRef = useRef(locale)
+  localeRef.current = locale
+  const languagePackRef = useRef(languagePack)
+  languagePackRef.current = languagePack
+  useEffect(() => {
+    runtimeRef.current?.applyLocale?.(locale, languagePack)
+    refreshPackageMenusRef.current()
+  }, [languagePack, locale])
 
   const reportSaveState = useCallback(
     (state: SaveState, error?: Error) => {
@@ -532,7 +547,7 @@ export const SpreadsheetEditor = forwardRef<
     if (readOnlyRef.current) return
     const workbook = runtimeRef.current?.univerAPI.getActiveWorkbook()
     if (!workbook) return
-    const sheetName=name ?? t('newSheet', { number: workbook.getSheets().length + 1 })
+    const sheetName=name ?? t('sheet.new', { number: workbook.getSheets().length + 1 })
     if(collaborationRef.current?.editWorksheet){
       void collaborationRef.current.editWorksheet({action:'add',name:sheetName,rows:initialRows,columns:initialColumns}).then(id=>workbook.getSheets().find(s=>s.getSheetId()===id)?.activate()).catch(error=>{onError?.(toError(error));runtimeRef.current?.univerAPI.showMessage({content:toError(error).message,type:'warning'})})
       return
@@ -588,15 +603,15 @@ export const SpreadsheetEditor = forwardRef<
     requireOperation('sheetRename')
     const nextName = draft.trim()
     if (!nextName) {
-      setSheetNameError(t('nameRequired'))
+      setSheetNameError(t('sheet.nameRequired'))
       return
     }
     if (nextName.length > 31) {
-      setSheetNameError(t('nameTooLong'))
+      setSheetNameError(t('sheet.nameTooLong'))
       return
     }
     if (/[:\\/?*[\]]/.test(nextName)) {
-      setSheetNameError(t('nameInvalid'))
+      setSheetNameError(t('sheet.nameInvalid'))
       return
     }
     const workbook = runtimeRef.current?.univerAPI.getActiveWorkbook()
@@ -605,14 +620,14 @@ export const SpreadsheetEditor = forwardRef<
     if (workbook.getSheets().some((item) =>
       item.getSheetId() !== sheetId && item.getSheetName().toLocaleLowerCase() === nextName.toLocaleLowerCase(),
     )) {
-      setSheetNameError(t('nameDuplicate'))
+      setSheetNameError(t('sheet.nameDuplicate'))
       return
     }
     if (nextName !== currentName) {
       try {
         sheet.setName(nextName)
       } catch (error) {
-        setSheetNameError(toError(error).message || t('renameFailed'))
+        setSheetNameError(toError(error).message || t('sheet.renameFailed'))
         return
       }
     }
@@ -663,7 +678,7 @@ export const SpreadsheetEditor = forwardRef<
       const normalized = toError(error)
       setLoading(false)
       onError?.(normalized)
-      runtimeRef.current?.univerAPI.showMessage({ content: t('importFailed', { message: normalized.message }), type: 'error' })
+      runtimeRef.current?.univerAPI.showMessage({ content: t('excel.importFailed', { message: normalized.message }), type: 'error' })
     }
   }, [onError, onXlsxWarnings, t, workbookId])
 
@@ -685,7 +700,7 @@ export const SpreadsheetEditor = forwardRef<
     } catch (error) {
       const normalized = toError(error)
       onError?.(normalized)
-      runtimeRef.current?.univerAPI.showMessage({ content: t('exportFailed', { message: normalized.message }), type: 'error' })
+      runtimeRef.current?.univerAPI.showMessage({ content: t('excel.exportFailed', { message: normalized.message }), type: 'error' })
     }
   }, [displayName, exportXlsx, onError, onXlsxWarnings, t])
 
@@ -702,17 +717,17 @@ export const SpreadsheetEditor = forwardRef<
   const uploadResource = useCallback(async (file: File, kind: ResourceKind = 'attachment') => {
     requireOperation('image')
     if (readOnlyRef.current) throw new Error('Spreadsheet is read only')
-    if (!effectiveResourceAdapter) throw new Error(t('resourceAdapterRequired'))
+    if (!effectiveResourceAdapter) throw new Error(t('resource.adapterRequired'))
     return withResourceSignal((signal) => effectiveResourceAdapter.upload(file, { kind }, { workbookId, signal }))
   }, [effectiveResourceAdapter, t, withResourceSignal, workbookId])
 
   const resolveResource = useCallback(async (resource: SpreadsheetResource) => {
-    if (!effectiveResourceAdapter) throw new Error(t('resourceAdapterRequired'))
+    if (!effectiveResourceAdapter) throw new Error(t('resource.adapterRequired'))
     return withResourceSignal((signal) => effectiveResourceAdapter.resolve(resource, { workbookId, signal }))
   }, [effectiveResourceAdapter, t, withResourceSignal, workbookId])
 
   const downloadResource = useCallback(async (resource: SpreadsheetResource) => {
-    if (!effectiveResourceAdapter) throw new Error(t('resourceAdapterRequired'))
+    if (!effectiveResourceAdapter) throw new Error(t('resource.adapterRequired'))
     const result = await withResourceSignal((signal) => effectiveResourceAdapter.download
       ? effectiveResourceAdapter.download(resource, { workbookId, signal })
       : effectiveResourceAdapter.resolve(resource, { workbookId, signal }))
@@ -722,26 +737,26 @@ export const SpreadsheetEditor = forwardRef<
   const insertChart = useCallback((type: AnalysisChartType, title?: string) => {
     try {
       requireOperation('chart')
-      if (readOnlyRef.current) throw new Error(t('chartReadOnly'))
+      if (readOnlyRef.current) throw new Error(t('chart.readOnly'))
       const workbook = runtimeRef.current?.univerAPI.getActiveWorkbook()
       const worksheet = workbook?.getActiveSheet()
       const range = worksheet?.getActiveRange()
-      if (!worksheet || !range) throw new Error(t('chartSelect'))
+      if (!worksheet || !range) throw new Error(t('chart.selectRange'))
       if(collaborationRef.current?.putFloatingObject){
-        if(!['line','column','bar','pie'].includes(type))throw new Error('当前共享图表支持折线、柱形、条形和饼图')
+        if(!['line','column','bar','pie'].includes(type))throw new Error(t('chart.sharedTypes'))
         const source=toCellRange(worksheet.getSheetId(),range)
-        void handleRef.current.putFloatingObject({kind:'chart',type:type as import('./floatingModel').FloatingChartType,title:title||'数据图表',source,anchor:source,width:520,height:320}).catch(error=>setChartError(String(error)))
+        void handleRef.current.putFloatingObject({kind:'chart',type:type as import('./floatingModel').FloatingChartType,title:title||t('chart.defaultTitle'),source,anchor:source,width:520,height:320}).catch(error=>setChartError(String(error)))
         setChartPickerOpen(false);return
       }
       const chartId = `analysis-chart-${crypto.randomUUID()}`
       const chartData = createChartData(range.getValues(), type, {
         chartId,
         workbookId,
-        title: title || t(CHART_TYPES.find((item) => item.type === type)?.labelKey ?? 'analysisChart'),
+        title: title || t(CHART_TYPES.find((item) => item.type === type)?.labelKey ?? 'chart.analysis'),
         sourceRange: range.getA1Notation(),
         sourceSheetId: worksheet.getSheetId(),
       }, t)
-      chartData.removeLabel = t('removeChart')
+      chartData.removeLabel = t('chart.remove')
       const index = worksheet.getAllFloatDoms().length
       const offset = (index % 4) * 28
       const result = worksheet.addFloatDomToPosition({
@@ -755,7 +770,7 @@ export const SpreadsheetEditor = forwardRef<
         data: chartData,
         allowTransform: true,
       }, chartId)
-      if (!result) throw new Error(t('chartInsertFailed'))
+      if (!result) throw new Error(t('chart.insertFailed'))
       hasAnalysisChartsRef.current = true
       setChartPickerOpen(false)
       setChartError(null)
@@ -780,15 +795,15 @@ export const SpreadsheetEditor = forwardRef<
       }
       requireOperation('image')
       if (readOnlyRef.current) return false
-      if (!effectiveResourceAdapter) throw new Error(t('resourceAdapterRequired'))
+      if (!effectiveResourceAdapter) throw new Error(t('resource.adapterRequired'))
       const range = runtimeRef.current?.univerAPI.getActiveWorkbook()?.getActiveSheet().getActiveRange()
-      if (!range) throw new Error(t('cellImageSelect'))
+      if (!range) throw new Error(t('image.selectCell'))
       return await range.insertCellImageAsync(file)
     } catch (error) {
       const normalized = toError(error)
       onError?.(normalized)
       runtimeRef.current?.univerAPI.showMessage({
-        content: t('cellImageFailed', { message: normalized.message }),
+        content: t('image.insertFailed', { message: normalized.message }),
         type: 'error',
       })
       return false
@@ -1008,17 +1023,17 @@ export const SpreadsheetEditor = forwardRef<
     resolveCommentAnchorRanges:anchor=>collaborationRef.current?.resolveCellAnchorRanges?.(anchor)??(resolveCommentAnchor(anchor)?[resolveCommentAnchor(anchor)!]:[]),
     setMerge:async(remove=false)=>{
       requireOperation(remove?'unmerge':'merge');const range=getSelection()
-      if(!range||runtimeRef.current?.getTextFormatState?.())throw new Error('请先完成编辑并选择单元格范围')
+      if(!range||runtimeRef.current?.getTextFormatState?.())throw new Error(tRef.current('edit.finishRange'))
       return runtimeRef.current!.univerAPI.executeCommand(MERGE_COMMAND,{unitId:workbookId,range,remove})
     },
     sortRecords:async options=>{
       requireOperation('sort');const range=getSelection()
-      if(!range||runtimeRef.current?.getTextFormatState?.())throw new Error('请先完成编辑并选择数据记录')
+      if(!range||runtimeRef.current?.getTextFormatState?.())throw new Error(tRef.current('edit.finishRecords'))
       return runtimeRef.current!.univerAPI.executeCommand(SORT_COMMAND,{unitId:workbookId,range,ascending:options.ascending,header:options.header??true,column:options.column??range.startColumn,identityReferences:!!collaborationRef.current?.editStructure})
     },
     setFreeze:({rows,columns})=>{
       requireOperation('freeze')
-      if(runtimeRef.current?.getTextFormatState?.())throw new Error('请先完成单元格编辑')
+      if(runtimeRef.current?.getTextFormatState?.())throw new Error(tRef.current('edit.finishCell'))
       const sheet=runtimeRef.current?.univerAPI.getActiveWorkbook()?.getActiveSheet()
       if(!sheet)throw new Error('NOT_READY')
       if(!Number.isSafeInteger(rows)||!Number.isSafeInteger(columns)||rows<0||columns<0||rows>=sheet.getMaxRows()||columns>=sheet.getMaxColumns())throw new Error('INVALID_FREEZE_RANGE')
@@ -1269,16 +1284,76 @@ export const SpreadsheetEditor = forwardRef<
             cellRenderersRef.current?.forEach((renderer) => renderer.onPointerLeave?.(info, event))
           },
         }
-        if (collaborationRef.current?.capabilities?.chart.supported !== false) runtime.univerAPI.createMenu({
-          id: 'uos.analysis-chart.menu',
-          title: t('chart'),
-          tooltip: t('chartTooltip'),
-          order: 30,
-          action: () => {
-            setChartError(null)
-            setChartPickerOpen(true)
-          },
-        }).appendTo('ribbon.insert.media')
+        refreshPackageMenusRef.current = () => {
+          if (collaborationRef.current?.capabilities?.chart.supported !== false) runtime.univerAPI.createMenu({
+            id: 'uos.analysis-chart.menu',
+            title: tRef.current('chart.label'),
+            tooltip: tRef.current('chart.tooltip'),
+            order: 30,
+            action: () => {
+              setChartError(null)
+              setChartPickerOpen(true)
+            },
+          }).appendTo('ribbon.insert.media')
+          const freezeMenus = [
+            {
+              id: 'uos.freeze.first-row',
+              title: tRef.current('freeze.firstRow'),
+              action: () => runtime.univerAPI.getActiveWorkbook()?.getActiveSheet().setFrozenRows(1),
+            },
+            {
+              id: 'uos.freeze.first-column',
+              title: tRef.current('freeze.firstColumn'),
+              action: () => runtime.univerAPI.getActiveWorkbook()?.getActiveSheet().setFrozenColumns(1),
+            },
+            {
+              id: 'uos.freeze.selected-rows',
+              title: tRef.current('freeze.selectedRows'),
+              action: () => {
+                const sheet = runtime.univerAPI.getActiveWorkbook()?.getActiveSheet()
+                const range = sheet?.getActiveRange()
+                if (!sheet || !range) return
+                sheet.setFrozenRows(Math.min(range.getLastRow() + 1, MAX_SHEET_ROWS))
+              },
+            },
+            {
+              id: 'uos.freeze.selected-columns',
+              title: tRef.current('freeze.selectedColumns'),
+              action: () => {
+                const sheet = runtime.univerAPI.getActiveWorkbook()?.getActiveSheet()
+                const range = sheet?.getActiveRange()
+                if (!sheet || !range) return
+                sheet.setFrozenColumns(Math.min(range.getLastColumn() + 1, MAX_SHEET_COLUMNS))
+              },
+            },
+            {
+              id: 'uos.freeze.selection',
+              title: tRef.current('freeze.selection'),
+              action: () => {
+                const sheet = runtime.univerAPI.getActiveWorkbook()?.getActiveSheet()
+                const range = sheet?.getActiveRange()
+                if (!sheet || !range) return
+                sheet.setFreeze({
+                  xSplit: range.getColumn(),
+                  ySplit: range.getRow(),
+                  startColumn: range.getColumn(),
+                  startRow: range.getRow(),
+                })
+              },
+            },
+            {
+              id: 'uos.freeze.cancel',
+              title: tRef.current('freeze.cancel'),
+              action: () => runtime.univerAPI.getActiveWorkbook()?.getActiveSheet().cancelFreeze(),
+            },
+          ]
+          if (collaborationRef.current?.capabilities?.freeze.supported !== false) freezeMenus.forEach((item, order) => runtime.univerAPI.createMenu({
+            ...item,
+            order,
+            tooltip: item.title,
+          }).appendTo('ribbon.view.display'))
+        }
+        refreshPackageMenusRef.current()
         refreshHostMenusRef.current = () => runtime.updateHostMenus?.(menusRef.current ?? [], () => ({
           runtime, selection: getSelection(), captureCommentAnchor, readOnly: readOnlyRef.current,
         }))
@@ -1293,68 +1368,11 @@ export const SpreadsheetEditor = forwardRef<
           if (chosen) onCommentAnchorClickRef.current?.(chosen.marker, chosen.range, hit)
         })
         customComponentDisposers.push(() => commentClicks.dispose())
-        const freezeMenus = [
-          {
-            id: 'uos.freeze.first-row',
-            title: t('freezeFirstRow'),
-            action: () => runtime.univerAPI.getActiveWorkbook()?.getActiveSheet().setFrozenRows(1),
-          },
-          {
-            id: 'uos.freeze.first-column',
-            title: t('freezeFirstColumn'),
-            action: () => runtime.univerAPI.getActiveWorkbook()?.getActiveSheet().setFrozenColumns(1),
-          },
-          {
-            id: 'uos.freeze.selected-rows',
-            title: t('freezeSelectedRows'),
-            action: () => {
-              const sheet = runtime.univerAPI.getActiveWorkbook()?.getActiveSheet()
-              const range = sheet?.getActiveRange()
-              if (!sheet || !range) return
-              sheet.setFrozenRows(Math.min(range.getLastRow() + 1, MAX_SHEET_ROWS))
-            },
-          },
-          {
-            id: 'uos.freeze.selected-columns',
-            title: t('freezeSelectedColumns'),
-            action: () => {
-              const sheet = runtime.univerAPI.getActiveWorkbook()?.getActiveSheet()
-              const range = sheet?.getActiveRange()
-              if (!sheet || !range) return
-              sheet.setFrozenColumns(Math.min(range.getLastColumn() + 1, MAX_SHEET_COLUMNS))
-            },
-          },
-          {
-            id: 'uos.freeze.selection',
-            title: t('freezeSelection'),
-            action: () => {
-              const sheet = runtime.univerAPI.getActiveWorkbook()?.getActiveSheet()
-              const range = sheet?.getActiveRange()
-              if (!sheet || !range) return
-              sheet.setFreeze({
-                xSplit: range.getColumn(),
-                ySplit: range.getRow(),
-                startColumn: range.getColumn(),
-                startRow: range.getRow(),
-              })
-            },
-          },
-          {
-            id: 'uos.freeze.cancel',
-            title: t('cancelFreeze'),
-            action: () => runtime.univerAPI.getActiveWorkbook()?.getActiveSheet().cancelFreeze(),
-          },
-        ]
-        if (collaborationRef.current?.capabilities?.freeze.supported !== false) freezeMenus.forEach((item, order) => runtime.univerAPI.createMenu({
-          ...item,
-          order,
-          tooltip: item.title,
-        }).appendTo('ribbon.view.display'))
         const isNewWorkbook = !loaded?.snapshot && !initialSnapshot
         const workbook = runtime.univerAPI.createWorkbook(
           loaded?.snapshot || initialSnapshot
             ? structuredClone(sanitizeWorkbookSnapshot((loaded?.snapshot ?? initialSnapshot)!))
-            : { id: workbookId, name: workbookName ?? t('unnamedWorkbook') },
+            : { id: workbookId, name: workbookName ?? tRef.current('workbook.untitled') },
         )
         hasAnalysisChartsRef.current = workbook.getSheets().some((sheet) =>
           sheet.getAllFloatDoms().some((item) => item.componentKey === ANALYSIS_CHART_COMPONENT),
@@ -1428,10 +1446,10 @@ export const SpreadsheetEditor = forwardRef<
             }catch(error){event.cancel=true;onError?.(toError(error));runtime.univerAPI.showMessage({content:toError(error).message,type:'warning'});return}
           }
           if(event.type===0&&adapter.capabilities?.merge.supported&&/sheet\.command\.(?:add|remove)-worksheet-merge/.test(event.id)){
-            event.cancel=true;runtime.univerAPI.showMessage({content:'请使用包提供的合并/取消合并命令（保留被覆盖单元格内容）',type:'warning'});return
+            event.cancel=true;runtime.univerAPI.showMessage({content:tRef.current('merge.usePackageCommand'),type:'warning'});return
           }
           if(event.type===0&&adapter.capabilities?.sort.supported&&event.id!==SORT_COMMAND&&/sort/.test(event.id)){
-            event.cancel=true;runtime.univerAPI.showMessage({content:'请使用顶部整条记录排序，评论会跟随记录移动',type:'warning'});return
+            event.cancel=true;runtime.univerAPI.showMessage({content:tRef.current('sort.useRecordSort'),type:'warning'});return
           }
           if (/^(?:univer|core)\.command\.(undo|redo)$/.test(event.id)) {
             if(runtime.getTextFormatState?.())return // Native draft history, not committed sheet history.
@@ -1444,7 +1462,7 @@ export const SpreadsheetEditor = forwardRef<
           const unsupportedCommand = capability ? !capability.supported : /(?:insert|remove|delete|move|copy).*(?:row|col|sheet)|merge|sort|filter|drawing|image|chart|table|conditional|validation|note|permission|protect/.test(event.id)
           if ((capability && !capability.supported) || (event.type === 2 && /^(sheet|sheets|drawing|data-validation)\.mutation\./.test(event.id) && !adapter.supportsMutation(event.id)) || (event.type === 0 && unsupportedCommand)) {
             event.cancel = true
-            runtime.univerAPI.showMessage({ content: capability?.reason ?? '当前协同会话暂不支持此操作', type: 'warning', duration: 3000 })
+            runtime.univerAPI.showMessage({ content: capability?.reason ?? tRef.current('session.unsupported'), type: 'warning', duration: 3000 })
           } else if (event.type === 2 && (event.id.startsWith('sheet.mutation.')||featureMutations[event.id])) {
             try { adapter.validateLocalMutation?.({ id: event.id, params: event.params }) }
             catch (error) { event.cancel = true; onError?.(toError(error)); runtime.univerAPI.showMessage({ content: toError(error).message, type: 'warning' }) }
@@ -1508,9 +1526,9 @@ export const SpreadsheetEditor = forwardRef<
                     workbookId: data.workbookId,
                     title: data.title,
                     sourceRange: data.sourceRange,
-                  }, t)
+                  }, tRef.current)
                   next.sourceSheetId = sourceSheet.getSheetId()
-                  next.removeLabel = data.removeLabel ?? t('removeChart')
+                  next.removeLabel = data.removeLabel ?? tRef.current('chart.remove')
                   if (JSON.stringify(next.values) !== JSON.stringify(data.values)) {
                     sheet.updateFloatDom(floatDom.id, { data: next })
                   }
@@ -1599,6 +1617,7 @@ export const SpreadsheetEditor = forwardRef<
           reportSaveState('dirty')
           if (autoSave) saveTimerRef.current = setTimeout(() => void handleRef.current.save(), 0)
         }
+        runtime.applyLocale?.(localeRef.current, languagePackRef.current)
         onReady?.(handleRef.current)
       } catch (error) {
         const normalized = toError(error)
@@ -1635,6 +1654,7 @@ export const SpreadsheetEditor = forwardRef<
       disposeChartComponent?.()
       disposeCellRenderers?.()
       customComponentDisposers.forEach((dispose) => dispose())
+      refreshPackageMenusRef.current = () => {}
       runtimeRef.current?.univer.dispose()
       runtimeRef.current = null
       refreshHostMenusRef.current = () => undefined
@@ -1658,7 +1678,7 @@ export const SpreadsheetEditor = forwardRef<
 
   useEffect(() => { refreshHostMenusRef.current() }, [menus, readOnly])
 
-  useEffect(() => setDisplayName(workbookName ?? t('unnamedWorkbook')), [t, workbookName])
+  useEffect(() => setDisplayName(workbookName ?? t('workbook.untitled')), [t, workbookName])
 
   useEffect(() => {
     if (!sheetManagerOpen) return
@@ -1685,23 +1705,24 @@ export const SpreadsheetEditor = forwardRef<
   }, [cancelRenameSheet, sheetManagerOpen])
 
   const commitName = () => {
-    const nextName = displayName.trim() || t('unnamedWorkbook')
+    const nextName = displayName.trim() || t('workbook.untitled')
     setDisplayName(nextName)
     runtimeRef.current?.univerAPI.getActiveWorkbook()?.setName(nextName)
     onWorkbookNameChange?.(nextName)
   }
 
   const stateText: Record<SaveState, string> = {
-    idle: autoSave ? t('autoSaveOn') : t('waitingSave'),
-    dirty: t('dirty'),
-    saving: t('saving'),
-    saved: t('saved'),
-    error: t('saveFailed'),
+    idle: autoSave ? t('save.autoOn') : t('save.waiting'),
+    dirty: t('save.dirty'),
+    saving: t('save.saving'),
+    saved: t('save.saved'),
+    error: t('save.failed'),
   }
 
   return (
     <div
       ref={editorRef}
+      lang={intlLocale(locale)}
       className={[
         'uos-editor',
         !showHeader && 'uos-editor--without-header',
@@ -1731,7 +1752,7 @@ export const SpreadsheetEditor = forwardRef<
         setSheetManagerOpen(true)
       }}
     >
-      <SheetBarAdd root={editorRef} disabled={operationDisabled('sheetAdd')} reason={operationReason('sheetAdd')} label={t('addSheet')} onAdd={()=>{try{addWorksheet()}catch(error){onError?.(toError(error))}}}/>
+      <SheetBarAdd root={editorRef} disabled={operationDisabled('sheetAdd')} reason={operationReason('sheetAdd')} label={t('sheet.add')} onAdd={()=>{try{addWorksheet()}catch(error){onError?.(toError(error))}}}/>
             <input
               ref={fileInputRef}
               className="uos-editor__file-input"
@@ -1756,26 +1777,26 @@ export const SpreadsheetEditor = forwardRef<
             />
       {showHeader && (
         <header className={['uos-editor__header', classNames?.header].filter(Boolean).join(' ')} style={styles?.header}>
-          <div className="uos-editor__brand" aria-label={t('spreadsheet')}>
+          <div className="uos-editor__brand" aria-label={t('editor.label')}>
             <span className="uos-editor__brand-icon">X</span>
           </div>
-          <div className="uos-editor__quick-actions" role="toolbar" aria-label={t('quickAccess')}>
-            <button type="button" title={t('save')} disabled={Boolean(collaboration)} onClick={() => void save()}>{t('save')}</button>
-            <button type="button" title={t('undo')} onClick={undo} aria-label={t('undo')}>↶</button>
-            <button type="button" title={t('redo')} onClick={redo} aria-label={t('redo')}>↷</button>
+          <div className="uos-editor__quick-actions" role="toolbar" aria-label={t('toolbar.quickAccess')}>
+            <button type="button" title={t('action.save')} disabled={Boolean(collaboration)} onClick={() => void save()}>{t('action.save')}</button>
+            <button type="button" title={t('action.undo')} onClick={undo} aria-label={t('action.undo')}>↶</button>
+            <button type="button" title={t('action.redo')} onClick={redo} aria-label={t('action.redo')}>↷</button>
             <button
               type="button"
-              title={t('applyBorder')}
-              aria-label={t('applyBorder')}
+              title={t('border.apply')}
+              aria-label={t('border.apply')}
               disabled={readOnly}
               onClick={() => setCellBorder(null, { color: borderColor })}
             >▦</button>
-            <label className="uos-editor__border-color" title={t('borderColor')}>
+            <label className="uos-editor__border-color" title={t('border.color')}>
               <span style={{ background: borderColor }} />
               <input
                 type="color"
                 value={borderColor}
-                aria-label={t('borderColor')}
+                aria-label={t('border.color')}
                 disabled={readOnly}
                 onChange={(event) => {
                   setBorderColor(event.target.value)
@@ -1786,7 +1807,7 @@ export const SpreadsheetEditor = forwardRef<
           </div>
           <div className="uos-editor__document">
             <input
-              aria-label={t('workbookName')}
+              aria-label={t('workbook.name')}
               value={displayName}
               readOnly={readOnly || Boolean(collaboration)}
               onChange={(event) => setDisplayName(event.target.value)}
@@ -1799,38 +1820,38 @@ export const SpreadsheetEditor = forwardRef<
               {stateText[saveState]}
             </span>
           </div>
-          <div className="uos-editor__header-actions" role="toolbar" aria-label={t('workbookActions')}>
-            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={operationDisabled('workbookReplace')} title={operationReason('workbookReplace')}>{t('openExcel')}</button>
-            {!showInsertToolbar && <button type="button" onClick={() => cellImageInputRef.current?.click()} disabled={operationDisabled('image') || !effectiveResourceAdapter} title={operationReason('image')}>{t('insertCellImage')}</button>}
-            <button type="button" onClick={() => void downloadXlsx()}>{t('exportExcel')}</button>
-            {readOnly && <span className="uos-editor__readonly">{t('readOnly')}</span>}
+          <div className="uos-editor__header-actions" role="toolbar" aria-label={t('workbook.actions')}>
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={operationDisabled('workbookReplace')} title={operationReason('workbookReplace')}>{t('excel.open')}</button>
+            {!showInsertToolbar && <button type="button" onClick={() => cellImageInputRef.current?.click()} disabled={operationDisabled('image') || !effectiveResourceAdapter} title={operationReason('image')}>{t('image.insertCell')}</button>}
+            <button type="button" onClick={() => void downloadXlsx()}>{t('excel.export')}</button>
+            {readOnly && <span className="uos-editor__readonly">{t('mode.readOnly')}</span>}
           </div>
         </header>
       )}
       {showInsertToolbar && toolbarLayout !== 'two-row' && (
-        <div className="uos-editor__insert-toolbar" role="toolbar" aria-label={t('insertActions')}>
-          <button type="button" disabled={operationDisabled('image') || !effectiveResourceAdapter} title={operationReason('image') || (!effectiveResourceAdapter ? t('resourceAdapterRequired') : undefined)} onClick={() => cellImageInputRef.current?.click()}><span aria-hidden="true">▧</span>{t('insertCellImage')}</button>
-          <button type="button" disabled={loading || readOnly || !onInsertAttachment} title={readOnly ? t('readOnly') : !onInsertAttachment ? t('attachmentHandlerRequired') : undefined} onClick={() => {
+        <div className="uos-editor__insert-toolbar" role="toolbar" aria-label={t('toolbar.insert')}>
+          <button type="button" disabled={operationDisabled('image') || !effectiveResourceAdapter} title={operationReason('image') || (!effectiveResourceAdapter ? t('resource.adapterRequired') : undefined)} onClick={() => cellImageInputRef.current?.click()}><span aria-hidden="true">▧</span>{t('image.insertCell')}</button>
+          <button type="button" disabled={loading || readOnly || !onInsertAttachment} title={readOnly ? t('mode.readOnly') : !onInsertAttachment ? t('insert.attachmentRequired') : undefined} onClick={() => {
             const runtime = runtimeRef.current
             if (!runtime || readOnlyRef.current || !onInsertAttachment) return
             void Promise.resolve().then(() => { if (!readOnlyRef.current) return onInsertAttachment({ runtime, selection: getSelection(), captureCommentAnchor, readOnly: false }) }).catch(error => onError?.(toError(error)))
-          }}><span aria-hidden="true">⌕</span>{t('insertAttachment')}</button>
+          }}><span aria-hidden="true">⌕</span>{t('insert.attachment')}</button>
           <button type="button" disabled={operationDisabled('formula')} title={operationReason('formula')} onClick={() => {
             void runtimeRef.current?.univerAPI.executeCommand('formula-ui.operation.more-functions').catch(error => onError?.(toError(error)))
-          }}><span aria-hidden="true">ƒx</span>{t('insertFormula')}</button>
+          }}><span aria-hidden="true">ƒx</span>{t('insert.formula')}</button>
           <span className="uos-editor__insert-divider" />
-          <button type="button" disabled={operationDisabled('chart')} title={operationReason('chart')} onClick={() => { setChartError(null); setChartPickerOpen(true) }}><span aria-hidden="true">▥</span>{t('insertChart')}</button>
-          <button type="button" disabled={operationDisabled('chart')} title={operationReason('chart')} onClick={() => { setChartPickerOpen(true); insertChart('line') }}><span aria-hidden="true">⌁</span>{t('chartLine')}</button>
+          <button type="button" disabled={operationDisabled('chart')} title={operationReason('chart')} onClick={() => { setChartError(null); setChartPickerOpen(true) }}><span aria-hidden="true">▥</span>{t('chart.insert')}</button>
+          <button type="button" disabled={operationDisabled('chart')} title={operationReason('chart')} onClick={() => { setChartPickerOpen(true); insertChart('line') }}><span aria-hidden="true">⌁</span>{t('chart.line')}</button>
         </div>
       )}
       {chartPickerOpen && (
-        <div className={['uos-editor__chart-picker', classNames?.chartPicker].filter(Boolean).join(' ')} style={styles?.chartPicker} role="dialog" aria-label={t('insertChart')}>
+        <div className={['uos-editor__chart-picker', classNames?.chartPicker].filter(Boolean).join(' ')} style={styles?.chartPicker} role="dialog" aria-label={t('chart.insert')}>
           <div className="uos-editor__chart-picker-header">
             <div>
-              <strong>{t('insertChart')}</strong>
-              <span>{t('chartHint')}</span>
+              <strong>{t('chart.insert')}</strong>
+              <span>{t('chart.hint')}</span>
             </div>
-            <button type="button" aria-label={t('close')} onClick={() => setChartPickerOpen(false)}>×</button>
+            <button type="button" aria-label={t('action.close')} onClick={() => setChartPickerOpen(false)}>×</button>
           </div>
           <div className="uos-editor__chart-grid">
             {CHART_TYPES.map((item) => (
@@ -1845,22 +1866,22 @@ export const SpreadsheetEditor = forwardRef<
       )}
       {sheetManagerOpen && (
         <div ref={sheetManagerRef} className={['uos-editor__sheet-manager', classNames?.sheetManager].filter(Boolean).join(' ')} style={{ ...styles?.sheetManager, left: sheetManagerLeft, bottom: sheetManagerBottom }}>
-          <div className="uos-editor__sheet-manager-panel" role={editingSheetId || confirmDeleteSheetId ? 'dialog' : 'menu'} aria-label={t('sheetManager')}>
+          <div className="uos-editor__sheet-manager-panel" role={editingSheetId || confirmDeleteSheetId ? 'dialog' : 'menu'} aria-label={t('sheet.manager')}>
             <div className="uos-editor__sheet-list">
               {sheetSummaries.filter((sheet) => sheet.id === contextSheetId).map((sheet) => {
                 return (
                 <div key={sheet.id} className="is-active">
                   {confirmDeleteSheetId === sheet.id ? <div className="uos-editor__sheet-confirm">
-                    <p>{t('deleteConfirm', {name: sheet.name})}</p>
-                    <button type="button" onClick={() => setConfirmDeleteSheetId(null)}>{t('cancel')}</button>
-                    <button type="button" className="uos-editor__sheet-delete" disabled={operationDisabled('sheetDelete') || sheetSummaries.length <= 1} onClick={() => { deleteSheet(sheet.id, sheet.name); setConfirmDeleteSheetId(null); setSheetManagerOpen(false) }}>{t('delete')}</button>
+                    <p>{t('sheet.deleteConfirm', {name: sheet.name})}</p>
+                    <button type="button" onClick={() => setConfirmDeleteSheetId(null)}>{t('action.cancel')}</button>
+                    <button type="button" className="uos-editor__sheet-delete" disabled={operationDisabled('sheetDelete') || sheetSummaries.length <= 1} onClick={() => { deleteSheet(sheet.id, sheet.name); setConfirmDeleteSheetId(null); setSheetManagerOpen(false) }}>{t('action.delete')}</button>
                   </div> : <>
                   {editingSheetId === sheet.id ? (
                     <div className="uos-editor__sheet-name-editor">
                       <input
                         ref={renameInputRef}
                         autoFocus
-                        aria-label={t('renameLabel', { name: sheet.name })}
+                        aria-label={t('sheet.renameLabel', { name: sheet.name })}
                         defaultValue={sheetNameDraft}
                         onFocus={(event) => event.currentTarget.select()}
                         onKeyDown={(event) => {
@@ -1880,11 +1901,11 @@ export const SpreadsheetEditor = forwardRef<
                   <div className="uos-editor__sheet-actions">
                     {editingSheetId === sheet.id ? (
                       <>
-                        <button type="button" onClick={() => commitSheetName(sheet.id, sheet.name, renameInputRef.current?.value)}>{t('save')}</button>
-                        <button type="button" onClick={cancelRenameSheet}>{t('cancel')}</button>
+                        <button type="button" onClick={() => commitSheetName(sheet.id, sheet.name, renameInputRef.current?.value)}>{t('action.save')}</button>
+                        <button type="button" onClick={cancelRenameSheet}>{t('action.cancel')}</button>
                       </>
                     ) : (
-                      <button type="button" role="menuitem" onClick={() => startRenameSheet(sheet.id, sheet.name)} disabled={operationDisabled('sheetRename')} title={operationReason('sheetRename')}>{t('rename')}</button>
+                      <button type="button" role="menuitem" onClick={() => startRenameSheet(sheet.id, sheet.name)} disabled={operationDisabled('sheetRename')} title={operationReason('sheetRename')}>{t('action.rename')}</button>
                     )}
                     {!editingSheetId && <button type="button" role="menuitem" disabled={operationDisabled('sheetCopy')} title={operationReason('sheetCopy')} onClick={() => {
                       requireOperation('sheetCopy')
@@ -1893,8 +1914,8 @@ export const SpreadsheetEditor = forwardRef<
                       if (workbook && target) workbook.duplicateSheet(target).activate()
                       refreshSheetSummaries()
                       setSheetManagerOpen(false)
-                    }}>{t('copy')}</button>}
-                    {!editingSheetId && <button type="button" role="menuitem" className="uos-editor__sheet-delete" onClick={() => setConfirmDeleteSheetId(sheet.id)} disabled={operationDisabled('sheetDelete') || sheetSummaries.length <= 1} title={sheetSummaries.length <= 1 ? t('lastSheetRequired') : operationReason('sheetDelete')}>{t('delete')}</button>}
+                    }}>{t('action.copy')}</button>}
+                    {!editingSheetId && <button type="button" role="menuitem" className="uos-editor__sheet-delete" onClick={() => setConfirmDeleteSheetId(sheet.id)} disabled={operationDisabled('sheetDelete') || sheetSummaries.length <= 1} title={sheetSummaries.length <= 1 ? t('sheet.lastRequired') : operationReason('sheetDelete')}>{t('action.delete')}</button>}
                   </div>
                   </>}
                 </div>
@@ -1904,22 +1925,22 @@ export const SpreadsheetEditor = forwardRef<
           </div>
         </div>
       )}
-      {toolbarLayout === 'two-row' && <OfficeToolbar handle={handleRef.current} readOnly={readOnly} capabilities={collaboration?.capabilities} menus={menus} end={toolbarEnd} inlineActions={inlineActions} />}
+      {toolbarLayout === 'two-row' && <OfficeToolbar handle={handleRef.current} readOnly={readOnly} capabilities={collaboration?.capabilities} menus={menus} end={toolbarEnd} inlineActions={inlineActions} t={t} />}
       <div ref={containerRef} className={['uos-editor__canvas', classNames?.canvas].filter(Boolean).join(' ')} style={styles?.canvas} />
-      <CellObjects handle={handleRef.current} renderer={renderCellObject} />
-      {!loading&&collaboration?.getFloatingObjects&&<FloatingObjects handle={handleRef.current} session={collaboration} readOnly={readOnly}/>}
-      {collaboration?.capabilities?.inlineImage.supported&&<InlineClipboardUploads handle={handleRef.current} readOnly={readOnly}/>}
-      {loading && <div className={['uos-editor__overlay', classNames?.overlay].filter(Boolean).join(' ')} style={styles?.overlay}>{t('loading')}</div>}
+      <CellObjects handle={handleRef.current} renderer={renderCellObject} t={t} />
+      {!loading&&collaboration?.getFloatingObjects&&<FloatingObjects handle={handleRef.current} session={collaboration} readOnly={readOnly} t={t}/>}
+      {collaboration?.capabilities?.inlineImage.supported&&<InlineClipboardUploads handle={handleRef.current} readOnly={readOnly} t={t}/>}
+      {loading && <div className={['uos-editor__overlay', classNames?.overlay].filter(Boolean).join(' ')} style={styles?.overlay}>{t('workbook.loading')}</div>}
       {loadError && (
         <div className={['uos-editor__overlay uos-editor__overlay--error', classNames?.overlay].filter(Boolean).join(' ')} style={styles?.overlay}>
-          {t('loadFailed', { message: loadError.message })}
+          {t('workbook.loadFailed', { message: loadError.message })}
         </div>
       )}
       {!showHeader && showSaveState && <div className={[`uos-editor__save-state uos-editor__save-state--${saveState}`, classNames?.saveState].filter(Boolean).join(' ')} style={styles?.saveState}>
-        {saveState === 'saving' && t('saving')}
-        {saveState === 'saved' && t('saved')}
-        {saveState === 'dirty' && t('dirty')}
-        {saveState === 'error' && t('saveFailed')}
+        {saveState === 'saving' && t('save.saving')}
+        {saveState === 'saved' && t('save.saved')}
+        {saveState === 'dirty' && t('save.dirty')}
+        {saveState === 'error' && t('save.failed')}
       </div>}
     </div>
   )
