@@ -6,7 +6,7 @@ import {
   createExlsxBaseline, type WorkbookSnapshot,
 } from '@online-office/univer-sheet/model'
 
-/** Provision once under platform authorization; defaults to current schema 3. */
+/** Provision once under platform authorization using the current schema. */
 export async function provisionNewWorkbook(snapshot: WorkbookSnapshot, newEpochId: string) {
   // Persist the returned baseline + update atomically. Do not call for ordinary opens.
   return createExlsxBaseline(snapshot, newEpochId)

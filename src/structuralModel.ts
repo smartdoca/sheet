@@ -12,7 +12,7 @@ export const STRUCTURAL_FEATURES='exlsx:identity-features'
 export const STRUCTURAL_SETTINGS='exlsx:identity-settings'
 export const STRUCTURAL_EDIT='sheet.mutation.exlsx-axis-edit'
 export const STRUCTURAL_COLLECTIONS=[AXIS_POSITIONS,AXIS_DELETIONS,AXIS_IDENTITIES,STRUCTURAL_CELLS,STRUCTURAL_FEATURES,STRUCTURAL_SETTINGS,FLOAT_OBJECTS,FLOAT_DELETIONS] as const
-export const structuralCollections=(schema:number):readonly string[]=>[...STRUCTURAL_COLLECTIONS,...schema>=5?[AXIS_SIZES]:[],...schema>=6?SHEET_COLLECTIONS:[]]
+export const structuralCollections=():readonly string[]=>[...STRUCTURAL_COLLECTIONS,AXIS_SIZES,...SHEET_COLLECTIONS]
 type Cell=Record<string,any>
 const fields=['v','f','p','t','si'] as const
 export const identityCellKey=(sheetId:string,row:string,column:string,field:string)=>JSON.stringify([sheetId,row,column,field])
@@ -34,8 +34,8 @@ export class StructuralModel {
   private baselineFeatures=new Map<string,unknown>()
   private baselineFreezes=new Map<string,{rows:string[];columns:string[]}>()
   private baselineFloating=new Map<string,FloatingObject>()
-  constructor(readonly doc:Y.Doc,readonly baseline:WorkbookSnapshot,readonly schemaVersion=4){
-    this.worksheets=new WorksheetCollection(doc,baseline,schemaVersion>=6)
+  constructor(readonly doc:Y.Doc,readonly baseline:WorkbookSnapshot){
+    this.worksheets=new WorksheetCollection(doc,baseline)
     this.cells=doc.getMap(STRUCTURAL_CELLS);this.features=doc.getMap(STRUCTURAL_FEATURES)
     // Baseline formulas are bound against the ORIGINAL axes, not the latest view.
     const original=new Y.Doc(),originalAxes=new Map<string,ReferenceAxes>()
@@ -74,13 +74,13 @@ export class StructuralModel {
       }
     }finally{for(const a of originalAxes.values()){a.rows.dispose();a.columns.dispose()}original.destroy()}
   }
-  sheetOrder(){return this.schemaVersion>=6?this.worksheets.order():this.baseline.sheetOrder}
-  visible(sheetId:string){return this.schemaVersion<6?!!this.baseline.sheets[sheetId]:this.worksheets.visible(sheetId)}
-  seed(sheetId:string){return this.schemaVersion>=6?this.worksheets.seed(sheetId):this.baseline.sheets[sheetId]}
-  sheetName(sheetId:string){return this.schemaVersion>=6?this.worksheets.names().get(sheetId)??null:this.baseline.sheets[sheetId]?.name??null}
+  sheetOrder(){return this.worksheets.order()}
+  visible(sheetId:string){return this.worksheets.visible(sheetId)}
+  seed(sheetId:string){return this.worksheets.seed(sheetId)}
+  sheetName(sheetId:string){return this.worksheets.names().get(sheetId)??null}
   sheetId(name:string){return this.sheetOrder().find(id=>this.sheetName(id)===name)??null}
   size(key:string):AxisSize{
-    if(this.schemaVersion>=5&&this.doc.getMap(AXIS_SIZES).has(key))return structuredClone(this.doc.getMap<AxisSize>(AXIS_SIZES).get(key)!)
+    if(this.doc.getMap(AXIS_SIZES).has(key))return structuredClone(this.doc.getMap<AxisSize>(AXIS_SIZES).get(key)!)
     const {sheetId,axis,id}=axisAddress(key),sheet=this.seed(sheetId),index=id.startsWith('b:')?Number(id.slice(2)):-1
     const data=axis==='row'?sheet.rowData?.[index]:sheet.columnData?.[index]
     return axis==='row'?{h:(data as {h?:number})?.h??null,ia:(data as {ia?:0|1})?.ia??1}:{w:(data as {w?:number})?.w??null}
@@ -90,7 +90,7 @@ export class StructuralModel {
     const index=this.axis(sheetId,axis).indexOf(id)
     return index<0?null:{sheetId,axis,index,value:this.size(key)}
   }
-  getAxes(sheetId:string):ReferenceAxes{let a=this.axes.get(sheetId);if(!a&&this.schemaVersion>=6){const s=this.seed(sheetId);a={rows:createStableAxis(this.doc,sheetId,'row',s.rowCount!),columns:createStableAxis(this.doc,sheetId,'column',s.columnCount!)};this.axes.set(sheetId,a)}if(!a)throw new Error('UNKNOWN_WORKSHEET');return a}
+  getAxes(sheetId:string):ReferenceAxes{let a=this.axes.get(sheetId);if(!a){const s=this.seed(sheetId);a={rows:createStableAxis(this.doc,sheetId,'row',s.rowCount!),columns:createStableAxis(this.doc,sheetId,'column',s.columnCount!)};this.axes.set(sheetId,a)}return a}
   axis(sheetId:string,axis:Axis):StableAxis{return this.getAxes(sheetId)[axis==='row'?'rows':'columns']}
   dimensions(sheetId:string){const a=this.getAxes(sheetId);return {...this.seed(sheetId),rowCount:a.rows.length,columnCount:a.columns.length}}
   address(sheetId:string,row:number,column:number){const a=this.getAxes(sheetId),r=a.rows.idAt(row),c=a.columns.idAt(column);if(!r||!c)throw new Error('CELL_OUT_OF_BOUNDS');return {row:r,column:c}}
@@ -175,7 +175,7 @@ export class StructuralModel {
       const p=this.projectCell(key);if(p)Object.assign((result.sheets[p.sheetId].cellData![p.row]??={})[p.column]??={},p.cell)
     }
     const floating=this.floatingObjects()
-    if(this.schemaVersion>=5)for(const key of this.doc.getMap(AXIS_SIZES).keys()){
+    for(const key of this.doc.getMap(AXIS_SIZES).keys()){
       const p=this.projectSize(key);if(!p)continue
       const field=p.axis==='row'?'rowData':'columnData',sheet=result.sheets[p.sheetId]
       Object.assign((sheet[field]??={})[p.index]??={},p.value)
@@ -184,9 +184,9 @@ export class StructuralModel {
     return result
   }
   validate(registerValidator:(field:string,value:unknown)=>void,changed?:Map<string,Set<string>>){
-    if(this.schemaVersion>=6)this.worksheets.validate()
+    this.worksheets.validate()
     const entries=(name:string):Iterable<[string,any]>=>changed?[...(changed.get(name)??[])].filter(k=>this.doc.getMap(name).has(k)).map(k=>[k,this.doc.getMap(name).get(k)]):this.doc.getMap(name)
-    if(this.schemaVersion>=5)for(const [key,value] of entries(AXIS_SIZES))validateAxisSize(key,value,(s,a)=>this.axis(s,a))
+    for(const [key,value] of entries(AXIS_SIZES))validateAxisSize(key,value,(s,a)=>this.axis(s,a))
     for(const name of [AXIS_IDENTITIES,AXIS_POSITIONS])for(const [key,value] of entries(name)){
       const {sheetId,axis,id}=axisAddress(key),a=this.axis(sheetId,axis)
       if(name===AXIS_IDENTITIES){if(!id.startsWith('i:')||value!==true)throw new Error('INVALID_AXIS_IDENTITY')}

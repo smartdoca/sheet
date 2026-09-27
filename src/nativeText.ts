@@ -16,7 +16,7 @@ export function createNativeText(injector: Injector, container: HTMLElement) {
   const commands = injector.get(ICommandService), context = injector.get(IContextService), bridge = injector.get(IEditorBridgeService)
   // Upstream treats EVERY document containing drawings as an image-only cell
   // and clears it on F2/double click. Our validated inline documents are editable
-  // text documents; adapt only this editor instance, keeping legacy behavior.
+  // text documents; adapt only this editor instance and keep the engine behavior.
   const editingController=injector.get(EditingRenderController) as unknown as {_isCellImageData(snapshot:import('@univerjs/core').IDocumentData):boolean}
   const isCellImage=editingController._isCellImageData
   editingController._isCellImageData=function(snapshot){

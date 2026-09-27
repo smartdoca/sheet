@@ -12,8 +12,7 @@ describe('host menu permission state', () => {
     expect(resolveSpreadsheetMenuPath(end.join('|'))).toEqual(end)
     expect(() => resolveSpreadsheetMenuPath('ribbon||invalid')).toThrow()
   })
-  it('only advertises atomic inline on the resource/clipboard schema', () => {
-    expect(getExlsxCapabilities(false,true,3).atomicInline).toMatchObject({ supported: false, enabled: false, code: 'UNSUPPORTED_OPERATION' })
+  it('advertises atomic inline on the current resource/clipboard model', () => {
     expect(getExlsxCapabilities().atomicInline).toMatchObject({supported:true,enabled:true})
     expect(getExlsxCapabilities(true).atomicInline.enabled).toBe(false)
     expect(getExlsxCapabilities(true).comments.enabled).toBe(true)

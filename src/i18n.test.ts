@@ -1,6 +1,5 @@
 import { expect, it } from 'vitest'
 import {
-  applyLegacyEditorOverrides,
   createTranslator,
   enEditorMessages,
   resolveLocale,
@@ -37,7 +36,6 @@ it('fills placeholders, selects plurals, and overrides individual keys', () => {
   expect(createTranslator('zh')('chart.summary', { title: '销售', count: 2 })).toBe('销售，2 条数据')
   expect(createTranslator('en', { 'action.save': 'Store' })('action.save')).toBe('Store')
   expect(createTranslator('en', { 'action.save': 'Store' })('action.undo')).toBe('Undo')
-  expect(createTranslator('zh', applyLegacyEditorOverrides({ save: '存档' }))('action.save')).toBe('存档')
 })
 
 it('falls back to English and then to the key', () => {

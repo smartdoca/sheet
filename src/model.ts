@@ -1,14 +1,11 @@
 import * as Y from 'yjs'
 import { createExlsxBaseline, restoreExlsxDocument, ExlsxSessionError, type ExlsxRecoveryBundle } from './session'
 import type { WorkbookSnapshot } from './types'
-import { SHEET_STATE, decodeFreeze, type SharedFreeze } from './sharedFreeze'
-import { FEATURES,featureAddress,decodeFeature,projectFeatureSnapshot } from './sharedFeatures'
-import {ROW_ORDER,reorderSnapshot,type RowOrder} from './sharedRowOrder'
 import {StructuralModel} from './structuralModel'
 import {inlinePlainText} from './inlineMedia'
 export type { WorkbookSnapshot } from './types'
 
-export { createExlsxBaseline, restoreExlsxDocument, ExlsxSessionError, EXLSX_CODEC, EXLSX_SCHEMA_VERSION, EXLSX_SHEET_STATE_SCHEMA_VERSION, EXLSX_FEATURE_SCHEMA_VERSION } from './session'
+export { createExlsxBaseline, restoreExlsxDocument, ExlsxSessionError, EXLSX_CODEC, EXLSX_SCHEMA_VERSION } from './session'
 export type { ExlsxBaseline, ExlsxRecoveryBundle, ExlsxErrorCode, ExlsxSchemaVersion } from './session'
 export { EXLSX_OPERATION_SUPPORT, getExlsxCapabilities } from './capabilities'
 export type { ExlsxOperation, ExlsxCapabilities, ExlsxCapability } from './capabilities'
@@ -17,20 +14,8 @@ export type { ExlsxOperation, ExlsxCapabilities, ExlsxCapability } from './capab
 export async function projectExlsxWorkbook(bundle: ExlsxRecoveryBundle): Promise<WorkbookSnapshot> {
   const doc = await restoreExlsxDocument(bundle)
   try {
-    if(bundle.baseline.schemaVersion>=4){const model=new StructuralModel(doc,bundle.baseline.snapshot,bundle.baseline.schemaVersion);try{return model.snapshot()}finally{model.dispose()}}
-    const result = structuredClone(bundle.baseline.snapshot)
-    for (const [key, value] of doc.getMap('exlsx:cells')) {
-      const [sheetId, row, column, field] = JSON.parse(key) as [string, number, number, 'content' | 's' | 'custom']
-      const matrix = result.sheets[sheetId].cellData ??= {}
-      const cell = ((matrix[row] ??= {})[column] ??= {})
-      // Style registers replace baseline styles rather than merging local style IDs.
-      if (field === 'content') Object.assign(cell, structuredClone(value))
-      else Object.assign(cell, { [field]: structuredClone(value) })
-    }
-    if(bundle.baseline.schemaVersion>=2)for(const [sheetId,value] of doc.getMap<SharedFreeze>(SHEET_STATE))result.sheets[sheetId].freeze=decodeFreeze(value)
-    if(bundle.baseline.schemaVersion===3)for(const [key,value] of doc.getMap(FEATURES)){const [sheetId,feature]=featureAddress(key);projectFeatureSnapshot(result,sheetId,feature,decodeFeature(value))}
-    if(bundle.baseline.schemaVersion===3)for(const [sheetId,order] of doc.getMap<RowOrder>(ROW_ORDER))reorderSnapshot(result,sheetId,order)
-    return result
+    const model=new StructuralModel(doc,bundle.baseline.snapshot)
+    try{return model.snapshot()}finally{model.dispose()}
   } finally { doc.destroy() }
 }
 
@@ -112,7 +97,7 @@ export async function prepareExlsxEpochRestore(current: ExlsxRecoveryBundle, his
   return {
     strategy: 'new-epoch', workbookId: current.baseline.workbookId,
     previousEpochId: current.baseline.epochId, expectedHeadHash: await stateHash(previous), previous,
-    next: await createExlsxBaseline(await projectExlsxWorkbook(history), newEpochId,{schemaVersion:current.baseline.schemaVersion}),
+    next: await createExlsxBaseline(await projectExlsxWorkbook(history), newEpochId),
     anchorPolicy: 'invalidate-old-epoch', pendingUpdatePolicy: 'preserve-old-epoch-for-recovery-copy',
   }
 }
@@ -135,5 +120,5 @@ export async function createExlsxRecoveryCopy(bundle: ExlsxRecoveryBundle, workb
   if (!workbookId || workbookId === bundle.baseline.workbookId || !epochId || epochId === bundle.baseline.epochId) throw new ExlsxSessionError('EPOCH_MISMATCH', 'Recovery copy requires a new workbook and epoch')
   const snapshot = await projectExlsxWorkbook(bundle)
   snapshot.id = workbookId
-  return createExlsxBaseline(snapshot, epochId,{schemaVersion:bundle.baseline.schemaVersion})
+  return createExlsxBaseline(snapshot, epochId)
 }

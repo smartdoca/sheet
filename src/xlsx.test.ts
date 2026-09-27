@@ -28,7 +28,7 @@ async function rewrite(input: Uint8Array, transform: (xml: string) => string) {
 }
 
 describe('bounded XLSX interchange', () => {
-  it('mixed business objects degrade readably in XLSX and restore into a schema 4 baseline without changing the source',async()=>{
+  it('mixed business objects degrade readably in XLSX and restore into a collaboration baseline without changing the source',async()=>{
     const source=snapshot();first(source).rowCount=220;first(source).columnCount=26
     const p={id:'mixed',documentStyle:{},...inlineFragment([{kind:'atomic',node:{type:'user',refId:'u1',label:'@张三'}},{kind:'image',assetId:'stable-image',name:'设计图.png',width:96,height:48},{kind:'atomic',node:{type:'attachment',refId:'stable-file',label:'附件.xlsx'}}])}
     p.body!.dataStream+=' 中文\r第二行\r\n';p.body!.textRuns=[{st:0,ed:3,ts:{bl:1}}]
@@ -38,7 +38,7 @@ describe('bounded XLSX interchange', () => {
     const imported=await xlsxToSnapshot(exported.blob,'mixed-import'),cell=first(imported.snapshot).cellData![0][0]
     expect(cell.p?inlinePlainText(cell.p):String(cell.v)).toContain('@张三[设计图.png]附件.xlsx 中文')
     expect(JSON.stringify(imported.snapshot)).not.toMatch(/stable-image|stable-file|exlsxInlineV1/)
-    const bundle=await createExlsxBaseline(imported.snapshot,'imported-schema4',{schemaVersion:4})
+    const bundle=await createExlsxBaseline(imported.snapshot,'imported-current')
     const projected=await projectExlsxWorkbook(bundle);expect(first(projected).cellData![1][1].f).toBe('=A2*2')
   })
   it('exports A1 then imports missing views/columns, ignoring maximum declared dimensions', async () => {
@@ -127,7 +127,7 @@ describe('bounded XLSX interchange', () => {
     await expect(snapshotToXlsx(source)).rejects.toMatchObject({ code: 'LIMIT_EXCEEDED' })
   })
 
-  it('rejects invalid files, legacy extensions and invalid sheet names without lossy renaming', async () => {
+  it('rejects invalid files, unsupported extensions and invalid sheet names without lossy renaming', async () => {
     await expect(xlsxToSnapshot(new Uint8Array([0, 1]), 'new')).rejects.toMatchObject({ code: 'INVALID_XLSX' })
     for (const fileName of ['a.xls', 'a.csv', 'a.json']) await expect(xlsxToSnapshot(await fixture(), 'new', { fileName })).rejects.toMatchObject({ code: 'UNSUPPORTED_FORMAT' })
     const source = snapshot(); first(source).name = 'bad/name'

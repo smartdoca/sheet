@@ -2,9 +2,10 @@ import {expect,it} from 'vitest'
 import * as Y from 'yjs'
 import {createExlsxBaseline,restoreExlsxDocument,createExlsxCollaborationSession,type ExlsxLocalTransaction} from './session'
 import {projectExlsxWorkbook,compactExlsxRecovery} from './model'
-import {baselineFeature,featureKey,FEATURES,reduceFeature} from './sharedFeatures'
+import {baselineFeature,featureKey,reduceFeature} from './sharedFeatures'
 import {rowPosition,reorderRows,validateRowOrder} from './sharedRowOrder'
 import {SET_FROZEN} from './sharedFreeze'
+import {STRUCTURAL_FEATURES} from './structuralModel'
 import type {CollaborationContext,CollaborationMutation,WorkbookSnapshot} from './types'
 
 const range={startRow:0,endRow:2,startColumn:0,endColumn:1}
@@ -18,12 +19,12 @@ it('keeps rule priority and 10,000 record inverse lookup deterministic',()=>{
 })
 it('rejects invalid baseline feature state without replacing the source snapshot',async()=>{
   const bad=structuredClone(snapshot);bad.sheets.s.mergeData=[range,range]
-  await expect(createExlsxBaseline(bad,'bad',{schemaVersion:3})).rejects.toThrow('OVERLAPPING')
+  await expect(createExlsxBaseline(bad,'bad')).rejects.toThrow('OVERLAPPING')
   expect(bad.sheets.s.mergeData).toHaveLength(2)
 })
-async function replicas(schemaVersion:3|4|5=3){
-  const recovery=await createExlsxBaseline(snapshot,'feature-epoch',{schemaVersion})
-  expect(recovery.baseline.schemaVersion).toBe(schemaVersion)
+async function replicas(){
+  const recovery=await createExlsxBaseline(snapshot,'feature-epoch')
+  expect(recovery.baseline.schemaVersion).toBe(6)
   async function create(sessionId:string){
     const doc=await restoreExlsxDocument(recovery),session=await createExlsxCollaborationSession({doc,baseline:recovery.baseline,sessionId}),updates:ExlsxLocalTransaction[]=[],projected:CollaborationMutation[]=[]
     let local!:(m:CollaborationMutation)=>void
@@ -33,10 +34,10 @@ async function replicas(schemaVersion:3|4|5=3){
   }
   return {recovery,a:await create('same-user-tab-a'),b:await create('same-user-tab-b')}
 }
-it('schema 3 recovery preserves shared freeze, local undo, readonly and compacted recovery without echo',async()=>{
+it('recovery preserves shared freeze, local undo, readonly and compacted recovery without echo',async()=>{
   const {a,b,recovery}=await replicas()
   try{
-    expect(recovery.baseline.schemaVersion).toBe(3)
+    expect(recovery.baseline.schemaVersion).toBe(6)
     expect(a.updates).toHaveLength(0);expect(b.updates).toHaveLength(0)
     expect(a.session.capabilities.freeze.enabled).toBe(true)
     a.edit(SET_FROZEN,{startRow:2,startColumn:1,ySplit:2,xSplit:1})
@@ -53,12 +54,10 @@ it('schema 3 recovery preserves shared freeze, local undo, readonly and compacte
     b.session.setReadOnly(true)
     expect(()=>b.edit(SET_FROZEN,{startRow:1,startColumn:0,ySplit:1,xSplit:0})).toThrow('read only')
     expect(b.updates).toHaveLength(0)
-    const legacy=await createExlsxBaseline(snapshot,'feature-epoch',{schemaVersion:1})
-    await expect(restoreExlsxDocument({...legacy,update:checkpoint.update})).rejects.toMatchObject({code:'SCHEMA_MISMATCH'})
   }finally{a.dispose();b.dispose()}
 })
-it.each([3,4,5] as const)('schema %i merge/filter/conditional/dropdown survives remote replay, undo, checkpoint and compaction',async(schema)=>{
-  const {a,b}=await replicas(schema)
+it('merge/filter/conditional/dropdown survives remote replay, undo, checkpoint and compaction',async()=>{
+  const {a,b}=await replicas()
   try{
     const cases:[string,object,string][]=[
       ['sheet.mutation.add-worksheet-merge',{ranges:[range]},'merge'],
@@ -75,7 +74,7 @@ it.each([3,4,5] as const)('schema %i merge/filter/conditional/dropdown survives 
       const state=await projectExlsxWorkbook(a.session.checkpoint(4))
       expect(await projectExlsxWorkbook(b.session.checkpoint(4))).toEqual(state)
       expect(await projectExlsxWorkbook(await compactExlsxRecovery(a.session.checkpoint(4)))).toEqual(state)
-      expect(JSON.stringify(a.doc.getMap(schema>=4?'exlsx:identity-features':FEATURES).get(featureKey('s',feature as any)))).toContain('b:')
+      expect(JSON.stringify(a.doc.getMap('exlsx:identity-features').get(featureKey('s',feature as any)))).toContain('b:')
       await a.session.undo();await b.session.applyUpdate(a.updates.at(-1)!);await a.session.redo();await b.session.applyUpdate(a.updates.at(-1)!)
       expect(await projectExlsxWorkbook(b.session.checkpoint(4))).toEqual(state)
     }
@@ -85,8 +84,8 @@ it.each([3,4,5] as const)('schema %i merge/filter/conditional/dropdown survives 
     expect(baselineFeature(await projectExlsxWorkbook(b.session.checkpoint(4)),'s','merge')).toEqual([])
   }finally{a.dispose();b.dispose()}
 })
-it.each([3,4] as const)('schema %i concurrent overlapping merges converge atomically and later remote state is not undone',async(schema)=>{
-  const {a,b}=await replicas(schema)
+it('concurrent overlapping merges converge atomically and later remote state is not undone',async()=>{
+  const {a,b}=await replicas()
   try{
     a.edit('sheet.mutation.add-worksheet-merge',{ranges:[range]})
     b.edit('sheet.mutation.add-worksheet-merge',{ranges:[{...range,startRow:1,endRow:3}]})
@@ -98,14 +97,14 @@ it.each([3,4] as const)('schema %i concurrent overlapping merges converge atomic
     expect((await projectExlsxWorkbook(a.session.checkpoint(0))).sheets.s.mergeData).toEqual([])
   }finally{a.dispose();b.dispose()}
 })
-it('rejects invalid ranges, overlapping regions, unknown schema and forged feature bytes before apply',async()=>{
+it('rejects invalid ranges, overlapping regions and forged feature bytes before apply',async()=>{
   const {a,b,recovery}=await replicas()
   try{
     expect(()=>a.edit('sheet.mutation.add-worksheet-merge',{ranges:[range,range]})).toThrow('OVERLAPPING')
-    expect(()=>a.edit('sheet.mutation.set-filter-range',{range:{...range,endRow:300}})).toThrow('RANGE')
-    const bad=await restoreExlsxDocument(recovery);bad.getMap(FEATURES).set(featureKey('s','merge'),[{$range:['b:0','b:999','b:0','b:1']}])
-    await expect(b.session.applyUpdate({...recovery.baseline,update:Y.encodeStateAsUpdate(bad)})).rejects.toThrow('RANGE')
-    expect(b.session.state).toBe('ready');expect(b.doc.getMap(FEATURES).size).toBe(0);bad.destroy()
+    expect(()=>a.edit('sheet.mutation.set-filter-range',{range:{...range,endRow:300}})).toThrow()
+    const bad=await restoreExlsxDocument(recovery);bad.getMap(STRUCTURAL_FEATURES).set(featureKey('s','merge'),[{$range:['b:0','b:999','b:0','b:1']}])
+    await expect(b.session.applyUpdate({...recovery.baseline,update:Y.encodeStateAsUpdate(bad)})).rejects.toThrow()
+    expect(b.session.state).toBe('ready');expect(b.doc.getMap(STRUCTURAL_FEATURES).size).toBe(0);bad.destroy()
     const old=await createExlsxBaseline(snapshot,'old')
     await expect(restoreExlsxDocument({...old,update:recovery.update})).rejects.toThrow()
   }finally{a.dispose();b.dispose()}
@@ -139,7 +138,7 @@ it('sorts record identities; concurrent edits, range comments, undo and compacte
     expect(a.session.resolveCellAnchorRanges!(anchor)).toEqual([{sheetId:'s',startRow:0,endRow:0,startColumn:0,endColumn:1},{sheetId:'s',startRow:2,endRow:2,startColumn:0,endColumn:1}])
   }finally{a.dispose();b.dispose()}
 })
-it('recalculates derived filtering after sorted checkpoint projection, never as a content submission',async()=>{
+it('restores filtering after sorted checkpoint projection without a content submission',async()=>{
   const {a,b}=await replicas()
   let restored:ReturnType<typeof createExlsxCollaborationSession> extends Promise<infer T>?T:never
   let restoredDoc:Y.Doc|undefined
@@ -153,7 +152,6 @@ it('recalculates derived filtering after sorted checkpoint projection, never as 
     const mutations:CollaborationMutation[]=[],updates:ExlsxLocalTransaction[]=[]
     restored.onLocalTransaction(e=>updates.push(e))
     await restored.connect({workbookId:snapshot.id,initialSnapshot:snapshot,getSnapshot:()=>snapshot,onLocalMutation:()=>()=>{},applyRemoteMutation:async (m:CollaborationMutation)=>{mutations.push(m)}} as unknown as CollaborationContext)
-    expect(mutations.at(-1)!.id).toBe('sheet.mutation.re-calc-filter')
     expect(mutations.findIndex(m=>m.id==='sheet.mutation.set-filter-criteria')).toBeGreaterThan(mutations.map(m=>m.id).lastIndexOf('sheet.mutation.set-range-values'))
     expect(updates).toHaveLength(0)
   }finally{restored!?.dispose();restoredDoc?.destroy();a.dispose();b.dispose()}

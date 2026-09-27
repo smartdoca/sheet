@@ -22,8 +22,8 @@ export class WorksheetCollection {
   private cachedOrder:string[]|undefined
   private cachedNames:Map<string,string>|undefined
   private invalidate=()=>{this.cachedOrder=undefined;this.cachedNames=undefined}
-  constructor(readonly doc:Y.Doc,readonly baseline:WorkbookSnapshot,private enabled=true){if(enabled)for(const name of SHEET_COLLECTIONS)doc.getMap(name).observe(this.invalidate)}
-  dispose(){if(this.enabled)for(const name of SHEET_COLLECTIONS)this.doc.getMap(name).unobserve(this.invalidate)}
+  constructor(readonly doc:Y.Doc,readonly baseline:WorkbookSnapshot){for(const name of SHEET_COLLECTIONS)doc.getMap(name).observe(this.invalidate)}
+  dispose(){for(const name of SHEET_COLLECTIONS)this.doc.getMap(name).unobserve(this.invalidate)}
   private generation(){let n=0;for(const key of this.doc.getMap(SHEET_DELETIONS).keys()){const [id]=JSON.parse(key);if(typeof id==='string'&&id.startsWith(recoveryPrefix))n=Math.max(n,Number(id.slice(recoveryPrefix.length))+1)}return n}
   seed(id:string):WorkbookSnapshot['sheets'][string]{
     const base=this.baseline.sheets[id]??this.doc.getMap<Seed>(SHEET_SEEDS).get(id)

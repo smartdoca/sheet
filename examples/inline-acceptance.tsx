@@ -7,7 +7,7 @@ import '@online-office/univer-sheet/style.css'
 const users=[{id:'demo-user-zhang',name:'张三'},{id:'demo-user-li',name:'李四'}]
 export async function createInlineAcceptance(room='inline-isolated') {
   const key=`exlsx:inline-demo:${room}`,stored=localStorage.getItem(key)
-  const bundle:ExlsxRecoveryBundle=stored?{...JSON.parse(stored),update:new Uint8Array(JSON.parse(stored).update)}:await createExlsxBaseline({id:room,name:'原生混排隔离验收',styles:{},sheetOrder:['s'],sheets:{s:{id:'s',name:'混排',rowCount:200,columnCount:26,cellData:{},columnData:{0:{w:600}}}}} as unknown as WorkbookSnapshot,room+'-epoch',{schemaVersion:2})
+  const bundle:ExlsxRecoveryBundle=stored?{...JSON.parse(stored),update:new Uint8Array(JSON.parse(stored).update)}:await createExlsxBaseline({id:room,name:'原生混排隔离验收',styles:{},sheetOrder:['s'],sheets:{s:{id:'s',name:'混排',rowCount:200,columnCount:26,cellData:{},columnData:{0:{w:600}}}}} as unknown as WorkbookSnapshot,room+'-epoch')
   if(!stored)localStorage.setItem(key,JSON.stringify({...bundle,update:Array.from(bundle.update)}))
   const doc=await restoreExlsxDocument(bundle),sessionId=crypto.randomUUID(),channel=new BroadcastChannel(key)
   const session=await createExlsxCollaborationSession({doc,baseline:bundle.baseline,sessionId})
