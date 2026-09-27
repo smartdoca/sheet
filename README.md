@@ -1,70 +1,75 @@
-# @online-office/univer-sheet
+# @smartdoca/sheet
 
-基于 Univer 的 React 表格编辑器，提供 Doca 所需的资源、评论、权限和 Yjs 协同接入面。
+[中文](README.zh-CN.md)
 
-## 安装
+Embeddable collaborative spreadsheet editor for React, powered by Univer Sheets. The package owns the workbook model and grid. The host owns identity, files, permissions, and the network.
 
-```bash
-yarn add @online-office/univer-sheet
+Licensed under [AGPL-3.0-only](LICENSE).
+
+## Install
+
+```sh
+npm install @smartdoca/sheet react react-dom
 ```
 
 ```tsx
-import { SpreadsheetEditor } from '@online-office/univer-sheet'
-import '@online-office/univer-sheet/style.css'
+import { SpreadsheetEditor } from "@smartdoca/sheet";
+import "@smartdoca/sheet/style.css";
 
-export function Sheet() {
-  return <SpreadsheetEditor workbookId="document-id" />
+export function Sheet({ id }: { id: string }) {
+  return <SpreadsheetEditor workbookId={id} readOnly={false} />;
 }
 ```
 
-## 当前数据模型
+## Props
 
-新建协作文档统一使用 `exlsx-cell-registers`、`EXLSX_SCHEMA_VERSION` 和当前结构身份模型。包不读取其他 schema，也不提供迁移、命令日志传输、离线数据库或第二条网络连接。
+`SpreadsheetEditor` accepts `SpreadsheetEditorProps`. `workbookId` is required.
 
-服务端创建基线：
+| Prop | Type | Role |
+|---|---|---|
+| `workbookId` | `string` | Stable workbook id. |
+| `workbookName` | `string` | Display name. |
+| `initialSnapshot` | `WorkbookSnapshot` | Snapshot applied when the editor mounts. |
+| `readOnly` | `boolean` | Stops cell editing. |
+| `collaboration` | `CollaborationAdapter` | Host bridge for workbook changes. |
+| `persistence` | `WorkbookPersistenceAdapter` | Optional local persistence. Do not add a second autosave path beside the host. |
+| `resourceAdapter` | `ResourceAdapter` | Host file and image storage. |
+| `remoteSelections` | `SpreadsheetRemoteSelection[]` | Ephemeral selections. Identity and color come from the host session. |
+| `currentSessionId` | `string` | This tab's session. Other tabs of the same user stay visible. |
+| `commentMarkers` | `SpreadsheetCommentMarker[]` | Host-owned comments on stable anchors. |
+| `activeCommentId` | `string \| null` | Highlighted comment. |
+| `onCommentAnchorClick` | function | One marker was activated. |
+| `onCommentAnchorsClick` | function | Every overlapping marker. There is no implicit first-comment choice. |
+| `onSelectionChange` | function | Local cell selection. |
+| `onChange` | `(snapshot) => void` | Workbook snapshot after a local change. |
+| `onReady` | `(handle) => void` | Receives `SpreadsheetEditorHandle`. |
+| `onSaveStateChange` | function | Host save indicator. |
+| `locale` | `SpreadsheetLocale` | `zh` and `zh-*` stay Chinese. Any other code shows English. Omitted stays Chinese. |
+| `messages` | `Record<string, string>` | Replaces individual message keys. |
+| `autoSave` | `boolean` | Built-in save timer. Leave it off when the host owns persistence. |
+| `showSaveState` | `boolean` | Hides the package save badge when the host draws its own. |
+| `showHeader` | `boolean` | Workbook header. |
+| `showInsertToolbar` | `boolean` | Insertion row, independent of the document header. |
+| `toolbarLayout` | `SpreadsheetToolbarLayout` | `simple` flattens native categories. |
+| `className`, `style`, `classNames`, `styles` | | Root and region styling. |
 
-```ts
-import { createExlsxBaseline } from '@online-office/univer-sheet/yjs'
+`initialRows`, `initialColumns`, `autoFitContent`, menus, image upload, and inline actions are also on `SpreadsheetEditorProps`.
 
-const recovery = await createExlsxBaseline(snapshot, epochId)
-```
+Updating props, readonly, or selection must not rebuild the workbook.
 
-客户端恢复并创建会话：
+## Collaboration
 
-```ts
-import {
-  createExlsxCollaborationSession,
-  restoreExlsxDocument,
-} from '@online-office/univer-sheet/yjs'
+Use `collaboration` for content. Use `remoteSelections` only for cursors.
 
-const doc = await restoreExlsxDocument(recovery)
-const session = await createExlsxCollaborationSession({
-  doc,
-  baseline: recovery.baseline,
-  sessionId,
-})
-```
+- Local content transactions enter the host outbox. Remote application, selection, scroll, and resize do not.
+- `readOnly` does not publish edits or editing selections.
+- `currentSessionId` hides this tab's own cursor and keeps other sessions.
+- Comment markers use stable row and column identities. Do not store comments as A1 text.
 
-宿主负责连接、认证、ACK、outbox、checkpoint 持久化和资源权限；编辑器只产生并应用 Yjs update。完整边界见 [Doca 接入说明](docs/DOCA-INTEGRATION.md)。
+Other entry points:
 
-## 主要入口
-
-- `@online-office/univer-sheet`：编辑器、类型、能力矩阵和资源接口。
-- `@online-office/univer-sheet/yjs`：基线、恢复、协同会话和 Yjs 编解码。
-- `@online-office/univer-sheet/model`：服务端安全的投影、压缩与恢复计划。
-- `@online-office/univer-sheet/xlsx`：有界的 `.xlsx` 导入导出。
-- `@online-office/univer-sheet/style.css`：编辑器样式。
-
-## 支持边界
-
-当前模型支持单元格内容与样式、稳定行列身份、结构插删、共享冻结、合并、排序、筛选、条件格式、数据验证、行高列宽、工作表增删移动改名、内联资源、基础浮动图片和图表。能力应从 `session.capabilities` 读取。
-
-资源二进制、业务评论正文、成员身份、权限、审核和持久化属于宿主。活动协作文档不能用导入文件或任意 JSON 整体替换；导入应创建新的文档基线。
-
-## 开发
-
-```bash
-yarn run check
-yarn test
-yarn build
-```
+| Import | Use |
+|---|---|
+| `@smartdoca/sheet/yjs` | Yjs session, restore, and local transactions. |
+| `@smartdoca/sheet/model` | Workbook projection and recovery. |
+| `@smartdoca/sheet/xlsx` | `xlsxToSnapshot` and `snapshotToXlsx`. |

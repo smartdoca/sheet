@@ -1,5 +1,5 @@
 {
-  "name": "@online-office/univer-sheet",
+  "name": "@smartdoca/sheet",
   "version": "0.2.0-rc.16",
   "description": "Embeddable React spreadsheet editor powered by Univer Sheets",
   "type": "module",
@@ -17,7 +17,8 @@
     "tests/sheets-browser.cua.js",
     "tests/inline-browser.cua.js",
     "tests/features-browser.cua.js",
-    "tests/current-default-browser.cua.js"
+    "tests/current-default-browser.cua.js",
+    "LICENSE"
   ],
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -97,5 +98,9 @@
   "publishConfig": {
     "access": "public"
   },
-  "license": "MIT"
+  "license": "AGPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/smartdoca/sheet.git"
+  }
 }
