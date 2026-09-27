@@ -14,7 +14,7 @@ import {clipSelectAllCopyRange,contentSelectionRange} from './selectAllCopy'
 export function attachNativeClipboard(injector:Injector,native:SpreadsheetNativeText){
   const service=injector.get(ISheetClipboardService)
   const clipboard=injector.get(IClipboardInterfaceService),write=clipboard.write
-  const docs=injector.get(IDocClipboardService),docCopy=docs.copy,docPaste=docs.paste,docLegacy=docs.legacyPaste
+  const docs=injector.get(IDocClipboardService),docCopy=docs.copy,docPaste=docs.paste,docClipboardFallback=docs.legacyPaste
   const mime='application/x-doc-fragment+json'
   docs.copy=async function(...args){
     const doc=native.copyFragment();if(!doc)return docCopy.apply(this,args)
@@ -44,7 +44,7 @@ export function attachNativeClipboard(injector:Injector,native:SpreadsheetNative
       const doc=parseDoc(options.internalJson,options.html)
       if(doc)return insertCaptured(doc)
     }
-    return docLegacy.call(this,options)
+    return docClipboardFallback.call(this,options)
   }
   docs.paste=async function(items){
     const state=native.getState(),target=state&&!state.formula?native.capture():null
@@ -69,7 +69,7 @@ export function attachNativeClipboard(injector:Injector,native:SpreadsheetNative
     catch(error){event.preventDefault();event.stopImmediatePropagation();injector.get(IMessageService).show({content:`无法粘贴富文本：${String(error)}`})}
   }
   document.addEventListener('paste',onNativePaste,true)
-  const generate=service.generateCopyContent,paste=service.paste,legacy=service.legacyPaste
+  const generate=service.generateCopyContent,paste=service.paste,clipboardFallback=service.legacyPaste
   let pending:InlineClipboardFragment|null=null,busy=false
   service.generateCopyContent=function(unitId,sheetId,range,options){
     let copyRange=range
@@ -134,7 +134,7 @@ export function attachNativeClipboard(injector:Injector,native:SpreadsheetNative
   }
   service.legacyPaste=function(html,text,files){
     if(native.getState()&&!native.getState()!.formula){const fragment=parseDoc(undefined,html);if(fragment)return Promise.resolve(insertCaptured(fragment))}
-    return run(html,()=>legacy.call(this,html,text,files))
+    return run(html,()=>clipboardFallback.call(this,html,text,files))
   }
   // Select-all must not grow from the active cell. A click beside data otherwise
   // becomes only the span between that cell and the nearby content.
@@ -160,5 +160,5 @@ export function attachNativeClipboard(injector:Injector,native:SpreadsheetNative
     const range=list?.at(-1)?.range as IRange|undefined
     if(range?.rangeType===RANGE_TYPE.ALL)selectContent()
   })
-  return {dispose(){document.removeEventListener('paste',onNativePaste,true);hook.dispose();selectionWatch.unsubscribe();selectAll.dispose();docs.copy=docCopy;docs.paste=docPaste;docs.legacyPaste=docLegacy;service.generateCopyContent=generate;service.paste=paste;service.legacyPaste=legacy;pending=null}}
+  return {dispose(){document.removeEventListener('paste',onNativePaste,true);hook.dispose();selectionWatch.unsubscribe();selectAll.dispose();docs.copy=docCopy;docs.paste=docPaste;docs.legacyPaste=docClipboardFallback;service.generateCopyContent=generate;service.paste=paste;service.legacyPaste=clipboardFallback;pending=null}}
 }

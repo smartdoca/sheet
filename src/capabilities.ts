@@ -1,10 +1,9 @@
 import { isDerivedLayoutCommand } from './derivedLayout'
-import { EXLSX_SCHEMA_VERSION, type ExlsxSchemaVersion } from './schema'
 /** Semantic capabilities: hosts never need native command names to gate UI. */
 const BASE_OPERATION_SUPPORT = {
   cellEdit: { supported: true, reason: '单元格内容寄存器；同格并发由 Yjs 确定性裁决' },
   cellStyle: { supported: true, reason: '基础单元格样式；整个样式寄存器裁决' },
-  formatPainter: {supported:false,reason:'协同格式刷需要 schema 4 的样式与富文本投影保护'},
+  formatPainter: {supported:false,reason:'协同格式刷需要样式与富文本投影保护'},
   formula: { supported: true, reason: '仅公式文本；不保证结构引用重写或服务端重算' },
   undoRedo: { supported: true, reason: '仅当前会话且不覆盖后来的远端获胜修改' },
   findReplace: { supported: true, reason: '固定结构内的模型查找替换' },
@@ -13,8 +12,8 @@ const BASE_OPERATION_SUPPORT = {
   nativeHyperlink: { supported: false, reason: '原生链接资源尚未纳入协同模型；不影响宿主自定义单元格数据' },
   inlineLink: { supported: true, reason: '原生文本位置的安全链接；保留前后文字，同格内容整体裁决' },
   inlineDocument: { supported: true, reason: '原生原子文档引用；宿主选择文档并按稳定 ID 跳转，同格内容整体裁决' },
-  inlineImage: {supported:false,reason:'内联图片需要 schema 4 的稳定资源模型'},
-  inlineAttachment: {supported:false,reason:'内联附件需要 schema 4 的资源与剪贴板契约'},
+  inlineImage: {supported:false,reason:'内联图片需要稳定资源模型'},
+  inlineAttachment: {supported:false,reason:'内联附件需要资源与剪贴板契约'},
   gridAppearance: { supported: false, reason: '工作表网格线设置尚未纳入当前协同模型' },
   comments: { supported: true, reason: '固定结构、同 epoch 的永久区域锚点' },
   atomicInline: { supported: false, reason: '尚无单元格原子内联身份节点、原生 @ 输入协议及原子剪贴板契约；setCellRichText 仅替换整格富文本' },
@@ -33,7 +32,7 @@ const BASE_OPERATION_SUPPORT = {
   sheetCopy: { supported: false, reason: '尚未实现副本身份、公式与资源原子复制' },
   sheetMetadata: { supported: false, reason: '工作表名称、颜色等尚未纳入当前协同模型' },
   sheetRename: { supported:false, reason:'共享工作表名称需要 schema 6' },
-  rowColumnSize: { supported: false, reason: '共享行高列宽需要 schema 5，不能直接修改旧基线版本' },
+  rowColumnSize: { supported: false, reason: '共享行高列宽需要稳定行列身份' },
   freeze: { supported: false, reason: '冻结状态尚未纳入当前协同模型' },
   hide: { supported: false, reason: '行列及工作表隐藏状态尚未纳入当前协同模型' },
   image: { supported: false, reason: '图片资源与位置尚无协同保证；不会触发上传' },
@@ -46,29 +45,23 @@ const BASE_OPERATION_SUPPORT = {
   workbookReplace: { supported: false, reason: '活动协同文档不能通过导入或 JSON 全量替换' },
 } as const
 export type ExlsxOperation = keyof typeof BASE_OPERATION_SUPPORT
-function supportForSchema(operation: ExlsxOperation, schemaVersion: ExlsxSchemaVersion): Readonly<{supported:boolean;reason:string}> {
-  if(schemaVersion>=6&&['sheetAdd','sheetDelete','sheetMove','sheetRename'].includes(operation))return {supported:true,reason:'稳定工作表身份；独立位置寄存器、会话删除声明，支持撤销及同谱系恢复'}
-  if(schemaVersion>=5&&operation==='rowColumnSize')return {supported:true,reason:'按稳定行列身份共享行高/列宽；拖拽提交、会话撤销及恢复；自动测量 ah 不提交'}
-  if(schemaVersion>=4){
-    if(operation==='formatPainter')return {supported:true,reason:'单次/连续复制单元格样式，一次应用一个协同事务；保留目标内容、局部富文本和合并结构；最多 10000 格'}
-    if(operation==='atomicInline')return {supported:true,reason:'原生文字范围和原子身份节点；同格内容整体裁决，复制粘贴为节点生成新实例 ID，业务身份保留'}
-    if(operation==='formula')return {supported:true,reason:'有界 A1 公式引用与内容原子存储，插删和记录排序跟随；不支持整列/整行、3D、结构化和外部工作簿引用'}
-    if(operation==='comments')return {supported:true,reason:'同 epoch 稳定行列身份；部分删除收缩，全部删除失效，排序拆成精确记录范围'}
-    if(['image','chart'].includes(operation))return {supported:true,reason:'包级浮动对象身份寄存器；稳定资源/数据范围，支持拖拽、删除、撤销与重载'}
-    if(['inlineImage','inlineAttachment'].includes(operation))return {supported:true,reason:'原生光标位置的原子资源；保存稳定资源 ID，同格内容整体裁决'}
-    if(['rowInsert','rowDelete','columnInsert','columnDelete'].includes(operation))return {supported:true,reason:'稳定行列身份；并发插入保留，删除优先显示，评论和 A1 公式引用跟随'}
-    if(['merge','unmerge','filter','conditionalFormat','dataValidation'].includes(operation))return {supported:true,reason:'结构身份范围；支持插删后的投影、会话撤销与重载'}
-    if(['freeze','sort'].includes(operation))return {supported:true,reason:'共享身份边界冻结与整条记录排序；评论和 A1 公式引用跟随'}
-  }
-  if (operation === 'freeze' && schemaVersion >= 2) return {supported:true,reason:'共享冻结范围；稳定行列 ID，整组确定性裁决，支持会话撤销'}
-  if (operation === 'sort' && schemaVersion === 3) return {supported:true,reason:'纯值整条记录排序，评论跟随；含公式的文档或合并重叠范围禁止排序'}
-  if (schemaVersion === 3 && ['merge','unmerge','filter','conditionalFormat','dataValidation'].includes(operation)) return {supported:true,reason:'固定轴稳定范围；按工作表功能组原子寄存器裁决，支持会话撤销与重载'}
-  if (['freeze','sort','merge','unmerge','filter','conditionalFormat','dataValidation'].includes(operation)) return {supported:false,reason:`当前文档使用 schema ${schemaVersion}，此功能需要 schema ${operation==='freeze'?2:3}；请由平台新建当前版本文档，不能直接改写已有基线版本`}
+function supportForCurrentSchema(operation: ExlsxOperation): Readonly<{supported:boolean;reason:string}> {
+  if(['sheetAdd','sheetDelete','sheetMove','sheetRename'].includes(operation))return {supported:true,reason:'稳定工作表身份；独立位置寄存器、会话删除声明，支持撤销及同谱系恢复'}
+  if(operation==='rowColumnSize')return {supported:true,reason:'按稳定行列身份共享行高/列宽；拖拽提交、会话撤销及恢复；自动测量 ah 不提交'}
+  if(operation==='formatPainter')return {supported:true,reason:'单次/连续复制单元格样式，一次应用一个协同事务；保留目标内容、局部富文本和合并结构；最多 10000 格'}
+  if(operation==='atomicInline')return {supported:true,reason:'原生文字范围和原子身份节点；同格内容整体裁决，复制粘贴为节点生成新实例 ID，业务身份保留'}
+  if(operation==='formula')return {supported:true,reason:'有界 A1 公式引用与内容原子存储，插删和记录排序跟随；不支持整列/整行、3D、结构化和外部工作簿引用'}
+  if(operation==='comments')return {supported:true,reason:'同 epoch 稳定行列身份；部分删除收缩，全部删除失效，排序拆成精确记录范围'}
+  if(['image','chart'].includes(operation))return {supported:true,reason:'包级浮动对象身份寄存器；稳定资源/数据范围，支持拖拽、删除、撤销与重载'}
+  if(['inlineImage','inlineAttachment'].includes(operation))return {supported:true,reason:'原生光标位置的原子资源；保存稳定资源 ID，同格内容整体裁决'}
+  if(['rowInsert','rowDelete','columnInsert','columnDelete'].includes(operation))return {supported:true,reason:'稳定行列身份；并发插入保留，删除优先显示，评论和 A1 公式引用跟随'}
+  if(['merge','unmerge','filter','conditionalFormat','dataValidation'].includes(operation))return {supported:true,reason:'结构身份范围；支持插删后的投影、会话撤销与重载'}
+  if(['freeze','sort'].includes(operation))return {supported:true,reason:'共享身份边界冻结与整条记录排序；评论和 A1 公式引用跟随'}
   return BASE_OPERATION_SUPPORT[operation]
 }
 /** Summary for NEW documents. Always use session.capabilities for an open document. */
 export const EXLSX_OPERATION_SUPPORT = Object.freeze(Object.fromEntries(
-  (Object.keys(BASE_OPERATION_SUPPORT) as ExlsxOperation[]).map(operation => [operation,Object.freeze(supportForSchema(operation,EXLSX_SCHEMA_VERSION))])
+  (Object.keys(BASE_OPERATION_SUPPORT) as ExlsxOperation[]).map(operation => [operation,Object.freeze(supportForCurrentSchema(operation))])
 ) as Record<ExlsxOperation,Readonly<{supported:boolean;reason:string}>>)
 export interface ExlsxCapability {
   operation: ExlsxOperation
@@ -78,10 +71,9 @@ export interface ExlsxCapability {
   reason: string
 }
 export type ExlsxCapabilities = Readonly<Record<ExlsxOperation, Readonly<ExlsxCapability>>>
-export function getExlsxCapabilities(readOnly = false, ready = true, schemaVersion:ExlsxSchemaVersion = EXLSX_SCHEMA_VERSION): ExlsxCapabilities {
-  if (![1,2,3,4,5,6].includes(schemaVersion)) throw new Error(`SCHEMA_MISMATCH: Unsupported exlsx schema ${schemaVersion}`)
+export function getExlsxCapabilities(readOnly = false, ready = true): ExlsxCapabilities {
   return Object.freeze(Object.fromEntries((Object.keys(BASE_OPERATION_SUPPORT) as ExlsxOperation[]).map(operation => {
-    const support=supportForSchema(operation,schemaVersion)
+    const support=supportForCurrentSchema(operation)
     const viewOnly = operation === 'comments' || operation === 'find'
     const code = !support.supported ? 'UNSUPPORTED_OPERATION' : !ready ? 'NOT_READY' : readOnly && !viewOnly ? 'READ_ONLY' : 'SUPPORTED'
     return [operation, Object.freeze({ operation, supported: support.supported, enabled: code === 'SUPPORTED', code,

@@ -18,11 +18,11 @@ const contentFields=['v','f','p','t','si'] as const
 const same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b)
 const normalized=(error:unknown)=>error instanceof ExlsxSessionError?error:new ExlsxSessionError('INVALID_UPDATE',String(error))
 
-/** Schema 4 identity model. Transport, ACK, IndexedDB and document ownership
+/** Current identity model. Transport, ACK, IndexedDB and document ownership
  * remain entirely with the injected host session. */
 export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollaborationSession {
-  const {doc,sessionId}=options,baseline=structuredClone(options.baseline),model=new StructuralModel(doc,baseline.snapshot,baseline.schemaVersion)
-  const origin={source:'local',sessionId},undo=new Y.UndoManager([AXIS_POSITIONS,AXIS_DELETIONS,STRUCTURAL_CELLS,STRUCTURAL_FEATURES,STRUCTURAL_SETTINGS,FLOAT_OBJECTS,FLOAT_DELETIONS,...baseline.schemaVersion>=5?[AXIS_SIZES]:[],...baseline.schemaVersion>=6?[SHEET_POSITIONS,SHEET_DELETIONS,SHEET_NAMES]:[]].map(name=>doc.getMap(name)),{trackedOrigins:new Set([origin]),captureTimeout:0})
+  const {doc,sessionId}=options,baseline=structuredClone(options.baseline),model=new StructuralModel(doc,baseline.snapshot)
+  const origin={source:'local',sessionId},undo=new Y.UndoManager([AXIS_POSITIONS,AXIS_DELETIONS,STRUCTURAL_CELLS,STRUCTURAL_FEATURES,STRUCTURAL_SETTINGS,FLOAT_OBJECTS,FLOAT_DELETIONS,AXIS_SIZES,SHEET_POSITIONS,SHEET_DELETIONS,SHEET_NAMES].map(name=>doc.getMap(name)),{trackedOrigins:new Set([origin]),captureTimeout:0})
   let state:ExlsxSessionState='idle',readOnly=!!options.readOnly,context:CollaborationContext|undefined,detach:(()=>void)|undefined,kind:ExlsxLocalTransaction['kind']='edit'
   let projection=Promise.resolve(),projected=structuredClone(baseline.snapshot)
   let editing:{range:SpreadsheetCellRange;row:string;column:string}|null=null,needsStructuralProjection=false
@@ -154,10 +154,10 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
     if(!context)return
     if(tx.changed.size)notifySafely(modelListeners,undefined)
     const changed=(name:string)=>[...tx.changed].find(([type])=>type===doc.getMap(name) as unknown)?.[1]
-    if(baseline.schemaVersion>=6&&changed(SHEET_POSITIONS)&&tx.changed.size===1)projectWorksheetOrder()
-    else if(changed(AXIS_POSITIONS)||changed(AXIS_DELETIONS)||(baseline.schemaVersion>=6&&SHEET_COLLECTIONS.some(name=>changed(name))))projectStructure()
+    if(changed(SHEET_POSITIONS)&&tx.changed.size===1)projectWorksheetOrder()
+    else if(changed(AXIS_POSITIONS)||changed(AXIS_DELETIONS)||SHEET_COLLECTIONS.some(name=>changed(name)))projectStructure()
     else if(tx.origin!==origin){
-      if(baseline.schemaVersion>=5){const keys=[...(changed(AXIS_SIZES)??[])].filter((k):k is string=>typeof k==='string');if(keys.length)projectSizes(keys)}
+      const sizeKeys=[...(changed(AXIS_SIZES)??[])].filter((k):k is string=>typeof k==='string');if(sizeKeys.length)projectSizes(sizeKeys)
       const keys=[...(changed(STRUCTURAL_CELLS)??[])].filter((k):k is string=>typeof k==='string')
       if(keys.length)projectCells(new Set(keys))
       const sheets=new Set([...(changed(STRUCTURAL_FEATURES)??[])].filter((k):k is string=>typeof k==='string').map(key=>featureAddress(key)[0]))
@@ -174,7 +174,6 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
   function prepare(mutation:CollaborationMutation):Write[]{
     writable()
     if(isSizeMutation(mutation.id)){
-      if(baseline.schemaVersion<5)throw new ExlsxSessionError('UNSUPPORTED_OPERATION','Shared row/column sizes require schema 5')
       return sizeWrites(mutation,(id,axis)=>model.axis(id,axis),key=>model.size(key))
     }
     if(mutation.id===MOVE_CELLS){
@@ -238,7 +237,7 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
           if(!same(old,value))writes.push({key:k,value:structuredClone(value)})
         }else throw new ExlsxSessionError('UNSUPPORTED_OPERATION',`Unsupported cell field ${field}`)
       }
-      validateCellRegister('content',content,true)
+      validateCellRegister('content',content)
       // The reference binding MUST win/lose together with its formula content.
       // Separate Y.Map keys can independently select different concurrent edits.
       if(!same(current,content))writes.push({key,value:{...content,...content.f?{$formula:formula??model.formula(key)}:{}}})
@@ -264,7 +263,7 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
   doc.on('update',mirror)
   const session:ExlsxCollaborationSession={
     async editWorksheet(edit){
-      writable();if(baseline.schemaVersion<6)throw new ExlsxSessionError('UNSUPPORTED_OPERATION','Worksheet collaboration requires schema 6')
+      writable()
       if(editing)throw new ExlsxSessionError('UNSUPPORTED_OPERATION','Finish the current cell draft before a worksheet edit')
       let id=''
       doc.transact(()=>{id=model.worksheets.edit(edit,sessionId)},origin)
@@ -287,8 +286,8 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
     },
     async removeFloatingObject(id){writable();if(!model.floatingObjects().some(v=>v.object.id===id))return;doc.transact(()=>doc.getMap(FLOAT_DELETIONS).set(JSON.stringify([id,sessionId]),true),origin)},
     get baseline(){return structuredClone(baseline)},get state(){return state},ready,managesPersistence:true,initialSnapshot:structuredClone(baseline.snapshot),
-    get capabilities(){return getExlsxCapabilities(readOnly,state==='ready',baseline.schemaVersion)},
-    supportsMutation:id=>id===SET_CELLS||id===MOVE_CELLS||id===SET_FROZEN||id===REORDER||!!featureMutations[id]||(baseline.schemaVersion>=5&&isSizeMutation(id)),
+    get capabilities(){return getExlsxCapabilities(readOnly,state==='ready')},
+    supportsMutation:id=>id===SET_CELLS||id===MOVE_CELLS||id===SET_FROZEN||id===REORDER||!!featureMutations[id]||isSizeMutation(id),
     validateLocalMutation:mutation=>{prepare(mutation)},
     async editStructure(edit:StructuralEdit){
       writable();if(editing)throw new ExlsxSessionError('UNSUPPORTED_OPERATION','Finish the current cell draft before a local structural edit')
@@ -311,17 +310,17 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
       if(message.epochId!==baseline.epochId)throw new ExlsxSessionError('EPOCH_MISMATCH','Preserve the original-epoch outbox')
       if(message.update.length>5*1024*1024)throw new ExlsxSessionError('INVALID_UPDATE','Update exceeds 5 MiB')
       try{
-        if(!validator){validator=new Y.Doc();Y.applyUpdate(validator,Y.encodeStateAsUpdate(doc));for(const name of structuralCollections(baseline.schemaVersion))validator.getMap(name);validatorModel=new StructuralModel(validator,baseline.snapshot,baseline.schemaVersion)}
+        if(!validator){validator=new Y.Doc();Y.applyUpdate(validator,Y.encodeStateAsUpdate(doc));for(const name of structuralCollections())validator.getMap(name);validatorModel=new StructuralModel(validator,baseline.snapshot)}
         const changed=new Map<string,Set<string>>()
-        const collect=(tx:Y.Transaction)=>{for(const [type,keys] of tx.changed)for(const name of structuralCollections(baseline.schemaVersion))if(type===validator!.getMap(name) as unknown){const bucket=changed.get(name)??new Set<string>();changed.set(name,bucket);for(const key of keys)if(typeof key==='string')bucket.add(key)}}
+        const collect=(tx:Y.Transaction)=>{for(const [type,keys] of tx.changed)for(const name of structuralCollections())if(type===validator!.getMap(name) as unknown){const bucket=changed.get(name)??new Set<string>();changed.set(name,bucket);for(const key of keys)if(typeof key==='string')bucket.add(key)}}
         validator.on('afterTransaction',collect)
         try{Y.applyUpdate(validator,message.update,'validate')}finally{validator.off('afterTransaction',collect)}
         const meta=validator.getMap('exlsx:metadata')
         for(const field of ['codec','schemaVersion','workbookId','epochId','baselineId'] as const)if(meta.get(field)!==baseline[field])throw new ExlsxSessionError('BASELINE_MISMATCH','Incoming metadata differs')
-        for(const name of validator.share.keys())if(name!=='exlsx:metadata'&&!structuralCollections(baseline.schemaVersion).includes(name))throw new Error('UNSUPPORTED_COLLECTION')
+        for(const name of validator.share.keys())if(name!=='exlsx:metadata'&&!structuralCollections().includes(name))throw new Error('UNSUPPORTED_COLLECTION')
         for(const key of changed.get(AXIS_IDENTITIES)??[])if(doc.getMap(AXIS_IDENTITIES).has(key)&&validator.getMap(AXIS_IDENTITIES).get(key)!==doc.getMap(AXIS_IDENTITIES).get(key))throw new Error('IMMUTABLE_AXIS_IDENTITY')
-        if(baseline.schemaVersion>=6)for(const key of changed.get(SHEET_SEEDS)??[])if(doc.getMap(SHEET_SEEDS).has(key)&&!same(validator.getMap(SHEET_SEEDS).get(key),doc.getMap(SHEET_SEEDS).get(key)))throw new Error('IMMUTABLE_WORKSHEET_IDENTITY')
-        validatorModel!.validate((f,v)=>validateCellRegister(f,v,true),changed)
+        for(const key of changed.get(SHEET_SEEDS)??[])if(doc.getMap(SHEET_SEEDS).has(key)&&!same(validator.getMap(SHEET_SEEDS).get(key),doc.getMap(SHEET_SEEDS).get(key)))throw new Error('IMMUTABLE_WORKSHEET_IDENTITY')
+        validatorModel!.validate(validateCellRegister,changed)
       }catch(error){discard();throw normalized(error)}
       Y.applyUpdate(doc,message.update,{source});await projection
     },

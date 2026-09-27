@@ -200,8 +200,8 @@ const MESSAGES: ReadonlyArray<readonly [string, string, string]> = [
   ['menu.duplicateWorkbook', '创建副本（由宿主提供）', 'Make a copy (provided by the host)'],
   ['menu.downloadXlsx', '下载为 XLSX（由宿主提供）', 'Download as XLSX (provided by the host)'],
   ['menu.fileHint', '文件操作与历史版本由平台接入；不会另开保存通道。', 'File actions and version history come from the platform. There is no separate save channel.'],
-  ['menu.dataHint', 'schema 3 支持固定范围的合并、共享筛选及规则。排序按整条纯值记录进行，评论跟随记录；有公式或与合并区域重叠时会拒绝排序。', 'Schema 3 supports fixed-range merge, a shared filter, and rules. Sort moves whole value records and their comments. Formulas or overlapping merges are rejected.'],
-  ['menu.viewHint', '冻结在 schema 2/3 会话中作为共享设置；schema 1 保持禁用。滚动及底部缩放不修改正文。', 'Freeze is a shared setting in schema 2/3 sessions and stays disabled in schema 1. Scrolling and the zoom control do not change the document.'],
+  ['menu.dataHint', '支持固定范围的合并、共享筛选及规则。排序按整条记录进行，评论跟随记录；与合并区域重叠时会拒绝排序。', 'Fixed-range merge, shared filters, and rules are supported. Sort moves whole records and their comments, and rejects ranges that overlap merges.'],
+  ['menu.viewHint', '冻结是共享设置；滚动及底部缩放不修改正文。', 'Freeze is shared. Scrolling and the zoom control do not change document content.'],
   ['menu.helpHint', '编辑单元格时，文字样式作用于选中文字或后续输入；未进入编辑时作用于整格。公式编辑不支持局部文字样式。', 'While editing, text styles apply to the selection or the next input. Outside editing they apply to the whole cell. Formula editing has no partial text styles.'],
   ['popup.close', '关闭工具栏菜单', 'Close the toolbar menu'],
   ['popup.font', '字体', 'Font'],
@@ -326,40 +326,6 @@ export const builtInEditorLocales: Record<string, Record<string, string>> = {
   en: enEditorMessages,
   'zh-CN': zhEditorMessages,
   'en-US': enEditorMessages,
-}
-
-const LEGACY_EDITOR_KEYS: Record<string, string> = {
-  unnamedWorkbook: 'workbook.untitled', sheet: 'sheet.noun', newSheet: 'sheet.new', addSheet: 'sheet.add',
-  save: 'action.save', undo: 'action.undo', redo: 'action.redo', openExcel: 'excel.open', exportExcel: 'excel.export',
-  applyBorder: 'border.apply', borderColor: 'border.color', downloadBackup: 'backup.download', readOnly: 'mode.readOnly',
-  spreadsheet: 'editor.label', quickAccess: 'toolbar.quickAccess', workbookName: 'workbook.name', workbookActions: 'workbook.actions',
-  autoSaveOn: 'save.autoOn', waitingSave: 'save.waiting', dirty: 'save.dirty', saving: 'save.saving', saved: 'save.saved',
-  saveFailed: 'save.failed', loading: 'workbook.loading', loadFailed: 'workbook.loadFailed', importFailed: 'excel.importFailed',
-  exportFailed: 'excel.exportFailed', chart: 'chart.label', chartTooltip: 'chart.tooltip', insertChart: 'chart.insert',
-  insertActions: 'toolbar.insert', insertAttachment: 'insert.attachment', insertFormula: 'insert.formula',
-  attachmentHandlerRequired: 'insert.attachmentRequired', chartHint: 'chart.hint', close: 'action.close', removeChart: 'chart.remove',
-  analysisChart: 'chart.analysis', chartColumn: 'chart.column', chartBar: 'chart.bar', chartLine: 'chart.line', chartArea: 'chart.area',
-  chartPie: 'chart.pie', chartDonut: 'chart.donut', chartScatter: 'chart.scatter', chartRadar: 'chart.radar',
-  chartReadOnly: 'chart.readOnly', chartSelect: 'chart.selectRange', chartMinimum: 'chart.minimum', chartNoData: 'chart.noData',
-  chartInsertFailed: 'chart.insertFailed', series: 'chart.series', item: 'chart.item', freezeFirstRow: 'freeze.firstRow',
-  freezeFirstColumn: 'freeze.firstColumn', freezeSelectedRows: 'freeze.selectedRows', freezeSelectedColumns: 'freeze.selectedColumns',
-  freezeSelection: 'freeze.selection', cancelFreeze: 'freeze.cancel', sheetManager: 'sheet.manager', lastSheetRequired: 'sheet.lastRequired',
-  new: 'action.new', rename: 'action.rename', copy: 'action.copy', moveLeft: 'action.moveLeft', moveRight: 'action.moveRight',
-  hide: 'action.hide', show: 'action.show', delete: 'action.delete', cancel: 'action.cancel', tabColor: 'sheet.tabColor',
-  hiddenPrefix: 'sheet.hiddenPrefix', renameLabel: 'sheet.renameLabel', nameRequired: 'sheet.nameRequired', nameTooLong: 'sheet.nameTooLong',
-  nameInvalid: 'sheet.nameInvalid', nameDuplicate: 'sheet.nameDuplicate', renameFailed: 'sheet.renameFailed', deleteConfirm: 'sheet.deleteConfirm',
-  resourceAdapterRequired: 'resource.adapterRequired', insertCellImage: 'image.insertCell', cellImageSelect: 'image.selectCell',
-  cellImageFailed: 'image.insertFailed',
-}
-
-/** Map previously published camelCase editor overrides onto the current keys. */
-export function applyLegacyEditorOverrides(editor?: Record<string, string>): Record<string, string> {
-  if (!editor) return {}
-  const next = { ...editor }
-  for (const [legacy, key] of Object.entries(LEGACY_EDITOR_KEYS)) {
-    if (editor[legacy] != null && next[key] == null) next[key] = editor[legacy]
-  }
-  return next
 }
 
 export type EditorTranslator = (key: string, params?: Record<string, string | number>) => string

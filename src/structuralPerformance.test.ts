@@ -5,13 +5,13 @@ import {mkdir,writeFile} from 'node:fs/promises'
 import {createExlsxBaseline,restoreExlsxDocument,createExlsxCollaborationSession,type ExlsxLocalTransaction} from './session'
 import type {WorkbookSnapshot,CollaborationContext,CollaborationMutation} from './types'
 
-it.skipIf(!process.env.EXLSX_BENCH)('measures schema 4 sparse identity collaboration at 100k populated cells',async()=>{
+it.skipIf(!process.env.EXLSX_BENCH)('measures sparse identity collaboration at 100k populated cells',async()=>{
   const results=[]
   for(const count of [10_000,100_000]){
     const initialHeap=process.memoryUsage().heapUsed,data:Record<number,Record<number,{v:number}>>={}
     for(let i=0;i<count;i++)(data[Math.floor(i/100)]??={})[i%100]={v:i}
     const seed={id:'structural-perf',name:'Perf',styles:{},sheetOrder:['s'],sheets:{s:{id:'s',name:'Sheet1',rowCount:1_000_000,columnCount:100,cellData:data}}} as unknown as WorkbookSnapshot
-    let t=performance.now();const bundle=await createExlsxBaseline(seed,'perf-schema4',{schemaVersion:4}),provisionMs=performance.now()-t
+    let t=performance.now();const bundle=await createExlsxBaseline(seed,'perf-current'),provisionMs=performance.now()-t
     const a=await restoreExlsxDocument(bundle),b=await restoreExlsxDocument(bundle)
     const sender=await createExlsxCollaborationSession({doc:a,baseline:bundle.baseline,sessionId:'sender'}),receiver=await createExlsxCollaborationSession({doc:b,baseline:bundle.baseline,sessionId:'receiver'})
     const updates:ExlsxLocalTransaction[]=[];let edit!:(m:CollaborationMutation)=>void,echoes=0,projectedCells=0

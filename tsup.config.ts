@@ -12,6 +12,6 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   splitting: false,
-  external: ['react', 'react-dom', 'yjs', 'y-protocols', 'y-indexeddb'],
+  external: ['react', 'react-dom', 'yjs'],
   loader: { '.css': 'css' },
 })

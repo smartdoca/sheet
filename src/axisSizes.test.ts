@@ -19,9 +19,9 @@ async function replica(bundle:ExlsxRecoveryBundle,id:string){
   return{doc,session,events,workbook,commands,mutate,project:()=>projectExlsxWorkbook(session.checkpoint(1)),close(){session.dispose();doc.destroy();univer.dispose()}}
 }
 it('native height + manual flag is one shared transaction; width, undo, redo, recovery, no echo and readonly',async()=>{
-  const bundle=await createExlsxBaseline(snapshot,'sizes-epoch',{schemaVersion:5}),a=await replica(bundle,'same-account-a'),b=await replica(bundle,'same-account-b')
+  const bundle=await createExlsxBaseline(snapshot,'sizes-epoch'),a=await replica(bundle,'same-account-a'),b=await replica(bundle,'same-account-b')
   try{
-    expect(bundle.baseline.schemaVersion).toBe(5);expect(a.session.capabilities.rowColumnSize.enabled).toBe(true);expect(a.events).toHaveLength(0)
+    expect(bundle.baseline.schemaVersion).toBe(6);expect(a.session.capabilities.rowColumnSize.enabled).toBe(true);expect(a.events).toHaveLength(0)
     a.mutate(ROW_HEIGHT,{rowHeight:68});a.mutate(ROW_AUTO,{autoHeightInfo:0});expect(a.events).toHaveLength(1)
     await b.session.applyUpdate(a.events[0]);await b.session.applyUpdate(a.events[0]);expect(b.events).toHaveLength(0)
     expect(b.workbook.getSnapshot().sheets.s.rowData![1]).toMatchObject({h:68,ia:0})
@@ -53,7 +53,7 @@ it('stable sizes follow insertion, record sort and delete; concurrent resize nev
     await a.session.undo();await b.session.applyUpdate(a.events.at(-1)!);expect((await b.project()).sheets.s.rowData![1].h).toBe(99)
   }finally{a.close();b.close()}
 })
-it('size bounds and malformed remote records are rejected atomically; schema 4 remains gated',async()=>{
+it('size bounds and malformed remote records are rejected atomically',async()=>{
   const bundle=await createExlsxBaseline(snapshot,'sizes-validation'),a=await replica(bundle,'a')
   try{
     for(const v of [0,-1,NaN,Infinity,4097])expect(()=>a.mutate(COL_WIDTH,{colWidth:v})).toThrow()
@@ -61,8 +61,5 @@ it('size bounds and malformed remote records are rejected atomically; schema 4 r
     const bad=await restoreExlsxDocument(bundle);bad.getMap(AXIS_SIZES).set(JSON.stringify(['s','row','b:1']),{h:50,ia:0,token:'no'})
     await expect(a.session.applyUpdate({...bundle.baseline,update:Y.encodeStateAsUpdate(bad)})).rejects.toThrow();bad.destroy()
     expect((await a.project()).sheets.s.rowData![1].h).toBe(30)
-    await expect(a.session.applyUpdate({...bundle.baseline,schemaVersion:4,update:bundle.update})).rejects.toMatchObject({code:'SCHEMA_MISMATCH'})
   }finally{a.close()}
-  const old=await replica(await createExlsxBaseline(snapshot,'schema4',{schemaVersion:4}),'old')
-  try{expect(old.session.capabilities.rowColumnSize.enabled).toBe(false);expect(()=>old.mutate(COL_WIDTH,{colWidth:200})).toThrow('schema 5');expect(old.doc.share.has(AXIS_SIZES)).toBe(false)}finally{old.close()}
 })

@@ -395,13 +395,13 @@ export interface SpreadsheetRemoteSelection {
 
 /** Stable row/column identities. Persist this value with the host-owned comment. */
 export interface SpreadsheetCommentAnchor {
-  version: 1 | 2 | 3 | 4
-  /** v4 records exact stable column membership as well as row membership. */
-  columnIds?: string[]
-  /** v3 captures the exact stable records, independent of later ordering. */
-  rowIds?: string[]
-  /** Required for v2/v3. Anchors from another lineage must never resolve by accident. */
-  epochId?: string
+  version: 4
+  /** Exact stable column membership, independent of later ordering. */
+  columnIds: string[]
+  /** Exact stable row membership, independent of later ordering. */
+  rowIds: string[]
+  /** Anchors from another lineage must never resolve by accident. */
+  epochId: string
   sheetId: string
   startRowId: string
   endRowId: string
@@ -517,7 +517,7 @@ export interface SpreadsheetEditorHandle {
   editStructure(edit:import('./structuralModel').StructuralEdit):Promise<void>
   editWorksheet(edit:import('./worksheetCollection').WorksheetEdit):Promise<string>
   startInlineUpload(files:readonly File[],kind:ResourceKind|'auto'):Promise<import('./inlineUploads').InlineUploadBatch>
-  /** Shared prefix freeze. Schema 2 session required; not a cell permission lock. */
+  /** Shared prefix freeze; not a cell permission lock. */
   setFreeze(options: {rows:number;columns:number}): void
   /** Non-destructive merge: covered values remain recoverable when unmerged. */
   setMerge(remove?:boolean): Promise<boolean>
@@ -530,8 +530,6 @@ export interface SpreadsheetEditorHandle {
   setCellNumberFormat(range: SpreadsheetCellRange | null, pattern: string): Promise<void>
   getSelectionRect(): DOMRect | null
   getRangeRect(range: SpreadsheetCellRange,options?:{allowOutside?:boolean}): DOMRect | null
-  /** @deprecated Disabled: throws UNSUPPORTED_OPERATION. Whole-cell objects are not atomic inline insertion. */
-  setCellObject(value: SpreadsheetCellObject | null, range?: SpreadsheetCellRange): void
   save(): Promise<WorkbookSnapshot>
   getSnapshot(): WorkbookSnapshot
   getRuntime(): SpreadsheetRuntime | null

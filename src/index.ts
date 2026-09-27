@@ -6,7 +6,7 @@ export {
 export type { SpreadsheetEditorProps } from './SpreadsheetEditor'
 export { createDefaultSpreadsheetRuntime } from './runtime'
 export { SPREADSHEET_MENU_PATHS, resolveSpreadsheetMenuPath } from './menuPaths'
-export { applyLegacyEditorOverrides, builtInEditorLocales, createTranslator, enEditorMessages, enUSEditorLocale, intlLocale, resolveLocale, zhEditorMessages, zhCNEditorLocale } from './i18n'
+export { builtInEditorLocales, createTranslator, enEditorMessages, enUSEditorLocale, intlLocale, resolveLocale, zhEditorMessages, zhCNEditorLocale } from './i18n'
 export type { EditorTranslator } from './i18n'
 export { createUniverImageIoService } from './resources'
 export { sanitizeWorkbookSnapshot } from './snapshot'

@@ -21,7 +21,7 @@ import {
   AnalysisChart,
 } from './AnalysisChart'
 import { createDefaultSpreadsheetRuntime } from './runtime'
-import { applyLegacyEditorOverrides, createTranslator, intlLocale, resolveLocale } from './i18n'
+import { createTranslator, intlLocale, resolveLocale } from './i18n'
 import { downloadResourceResult } from './resources'
 import {isFormulaProjection} from './transactionOrigin'
 import { sanitizeWorkbookSnapshot } from './snapshot'
@@ -76,8 +76,6 @@ import './style.css'
 const EMPTY_REMOTE_SELECTIONS: SpreadsheetRemoteSelection[] = []
 
 export interface SpreadsheetEditorProps {
-  /** @deprecated No native inline range contract; this callback is not invoked. */
-  onMentionRequest?: (range: SpreadsheetCellRange) => void
   renderCellObject?: (object: import('./types').SpreadsheetCellObject) => import('react').ReactNode
   onInsertResource?: (kind: 'image' | 'floating-image' | 'attachment') => void
   /** Return true synchronously to claim this paste; host uploads/resolves asynchronously. */
@@ -301,7 +299,6 @@ export const SpreadsheetEditor = forwardRef<
     menus,
     showInsertToolbar = true,
     onInsertAttachment,
-    onMentionRequest,
     renderCellObject,
     onInsertResource,
     onPasteContent,
@@ -464,7 +461,7 @@ export const SpreadsheetEditor = forwardRef<
   const [runtimeGeneration, setRuntimeGeneration] = useState(0)
   const [borderColor, setBorderColor] = useState('#000000')
   const languagePack = languagePacks?.[locale] ?? languagePacks?.[resolveLocale(locale)]
-  const t = useMemo(() => createTranslator(locale, { ...applyLegacyEditorOverrides(languagePack?.editor), ...messages }), [languagePack, locale, messages])
+  const t = useMemo(() => createTranslator(locale, { ...languagePack?.editor, ...messages }), [languagePack, locale, messages])
   const tRef = useRef(t)
   tRef.current = t
   const localeRef = useRef(locale)
@@ -819,7 +816,7 @@ export const SpreadsheetEditor = forwardRef<
   useEffect(() => {
     const pointer = (e: PointerEvent) => { selectedHere.current = !!editorRef.current?.contains(e.target as Node) }
     const paste = (e: ClipboardEvent) => {
-      // Legacy whole-cell paste hooks cannot represent a native inline caret.
+      // Whole-cell paste hooks cannot represent a native inline caret.
       if (editingCellRef.current || readOnlyRef.current || !selectedHere.current || !onPasteContent || !e.clipboardData) return
       const active = document.activeElement
       if (active && active !== document.body && !editorRef.current?.contains(active) && !active.matches('[data-u-comp="editor"]')) return
@@ -1096,9 +1093,6 @@ export const SpreadsheetEditor = forwardRef<
       if (!options?.allowOutside&&(y < canvas.top || x < canvas.left || y >= canvas.bottom || x >= canvas.right)) return null;
       return new DOMRect(x, y, rect.width * zoom, rect.height * zoom);
     },
-    setCellObject: (value, range) => {
-      throw new Error('UNSUPPORTED_OPERATION: whole-cell objects are not native atomic inline insertion; this legacy write API is disabled')
-    },
     save,
     getSnapshot,
     getRuntime: () => runtimeRef.current,
@@ -1147,7 +1141,6 @@ export const SpreadsheetEditor = forwardRef<
     setCellNumberFormat:handleRef.current.setCellNumberFormat,
     getSelectionRect: handleRef.current.getSelectionRect,
     getRangeRect: handleRef.current.getRangeRect,
-    setCellObject: handleRef.current.setCellObject,
     save,
     getSnapshot,
     getRuntime: () => runtimeRef.current,
@@ -1268,7 +1261,7 @@ export const SpreadsheetEditor = forwardRef<
         const markerRenderer: SpreadsheetCellRenderer = {
           drawWith(ctx, info, skeleton, spreadsheets) {
             cellRenderersRef.current?.forEach((renderer) => renderer.drawWith(ctx, info, skeleton, spreadsheets))
-            // Legacy custom corner renderer is supplementary, not the range decoration.
+            // The custom corner renderer is supplementary, not the range decoration.
             if (renderCommentMarkerRef.current) resolvedCommentMarkersRef.current.get(`${info.subUnitId}:${info.row}:${info.col}`)?.forEach(({ marker }) => renderCommentMarkerRef.current?.(ctx, info, marker))
           },
           isHit(position, info) {

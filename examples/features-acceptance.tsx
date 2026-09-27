@@ -8,11 +8,11 @@ import {snapshotToXlsx} from '@online-office/univer-sheet/xlsx'
 
 /** Host-only transport and comments. This isolated fixture is not a production ACK queue. */
 export async function mountFeaturesAcceptance(element:HTMLElement){
-  const params=new URLSearchParams(location.search),room=params.get('room')??'features-schema6-isolated',schema=params.get('schema')==='3'?3:params.get('schema')==='4'?4:params.get('schema')==='5'?5:6,key=`exlsx-features:${room}${schema>=4?`:schema${schema}`:''}`
+  const params=new URLSearchParams(location.search),room=params.get('room')??'features-current-isolated',key=`exlsx-features:${room}`
   const stored=localStorage.getItem(key)
   const values=[['记录','分数','状态','负责人'],['丙',30,'待办','张三'],['甲',10,'进行中','李四'],['乙',20,'完成','王五'],['丁',40,'待办','赵六']]
   const snapshot={id:room,name:'共享功能验收',styles:{},sheetOrder:['records'],sheets:{records:{id:'records',name:'记录',rowCount:220,columnCount:26,cellData:Object.fromEntries(values.map((row,r)=>[r,Object.fromEntries(row.map((v,c)=>[c,{v}]))])),columnData:{0:{w:160},1:{w:120},2:{w:160},3:{w:140}}}}} as unknown as WorkbookSnapshot
-  const recovery:ExlsxRecoveryBundle=stored?{...JSON.parse(stored),update:new Uint8Array(JSON.parse(stored).update)}:await createExlsxBaseline(snapshot,`${room}-epoch${schema>=4?`-schema${schema}`:''}`,{schemaVersion:schema})
+  const recovery:ExlsxRecoveryBundle=stored?{...JSON.parse(stored),update:new Uint8Array(JSON.parse(stored).update)}:await createExlsxBaseline(snapshot,`${room}-epoch`)
   if(!stored)localStorage.setItem(key,JSON.stringify({...recovery,update:[...recovery.update]}))
   const doc=await restoreExlsxDocument(recovery),sessionId=crypto.randomUUID(),session=await createExlsxCollaborationSession({doc,baseline:recovery.baseline,sessionId})
   const channel=new BroadcastChannel(key)
@@ -65,7 +65,7 @@ export async function mountFeaturesAcceptance(element:HTMLElement){
     return <main style={{height:'100vh',display:'flex',flexDirection:'column',font:'13px system-ui'}}>
       <header style={{padding:10,background:'#edf5f0'}}><a href="?acceptance=index">验收目录</a> · <strong>共享功能 · schema {recovery.baseline.schemaVersion} · 隔离文档</strong> · <output aria-label="协同计数">本地提交 {writes} · 远端接收 {received}</output>
         <div style={{display:'flex',gap:8,margin:'6px 0'}}><button onClick={()=>setReadonly(v=>!v)}>{readonly?'恢复编辑':'只读'}</button><button onClick={()=>setNarrow(v=>!v)}>切换窄屏</button><button onClick={()=>{const s=ref.current!.getSnapshot();setResult(JSON.stringify({rowData:s.sheets.records.rowData,columnData:s.sheets.records.columnData,rows:s.sheets.records.cellData,merges:s.sheets.records.mergeData,freeze:s.sheets.records.freeze,resources:s.resources,anchors:markers.map(m=>({id:m.id,ranges:ref.current!.resolveCommentAnchorRanges(m.anchor)}))}))}}>读取功能模型</button><button onClick={()=>{const c=session.checkpoint(writes);localStorage.setItem(key,JSON.stringify({...c,update:[...c.update]}));setResult('checkpoint 已保存')}}>保存测试 checkpoint</button></div>
-        <p style={{margin:0}}>A1:D5 是记录数据；schema 6 增加工作表协同：末尾 ＋ 新增、右键重命名/删除、直接拖拽排序（边缘自动滚动）。schema 5 及更早版本保留原能力，不自动升级已有数据。F2 编辑后输入 @ 选择用户。</p>
+        <p style={{margin:0}}>A1:D5 是记录数据；支持工作表新增、重命名、删除和直接拖拽排序（边缘自动滚动）。F2 编辑后输入 @ 选择用户。</p>
         <button onClick={()=>{const s=ref.current!.getSnapshot();setResult(JSON.stringify({order:s.sheetOrder,sheets:s.sheetOrder.map(id=>({id,name:s.sheets[id].name,A1:s.sheets[id].cellData?.[0]?.[0]}))}))}}>读取工作表模型</button>
         <button onClick={()=>{failNextUpload=true;setResult('下一次上传将模拟失败，请在插入面板重试')}}>模拟一次上传失败</button>
         <button disabled={!!releaseUpload} onClick={()=>{pauseNextUpload=true;setResult('下一次上传将暂停回调，可测试取消、只读或远端删除后再完成上传')}}>暂停下一次上传回调</button>

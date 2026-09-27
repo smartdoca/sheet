@@ -25,7 +25,7 @@ export async function mountAcceptanceSuite(element: HTMLElement) {
     <h2><a href={`?acceptance=features&schema=6&room=${encodeURIComponent(room+'-worksheets-v6')}`}>工作表新增 / 删除 / 拖拽排序 / 重命名 · 协同双页</a></h2>
     <p>schema 6：同一链接开两页，点击末尾 +，拖拽标签，右键删除；可保存 checkpoint 后刷新。旧 schema 文档不自动升级。</p>
     <h2><a href={`?acceptance=features&case=features&schema=4&room=${encodeURIComponent(room+'-structure-media-v4')}`}>行列结构 / 混排图片附件 / 浮动图片图表 / 共享功能 · 双页</a></h2>
-    <p>schema 4 隔离示例：F2 输入 @，插入文档、内联图片和附件，Shift+Enter 换行，选择部分文字设样式。插入菜单提供行列结构及浮动图表；同一链接打开两页验证同步、评论和公式引用跟随。可模拟上传失败并重试。</p>
+    <p>当前协同模型隔离示例：F2 输入 @，插入文档、内联图片和附件，Shift+Enter 换行，选择部分文字设样式。插入菜单提供行列结构及浮动图表；同一链接打开两页验证同步、评论和公式引用跟随。可模拟上传失败并重试。</p>
     <h2><a href={`?acceptance=sheets&case=sheets&room=${encodeURIComponent(room)}`}>工作表与底部菜单 · 单机</a></h2>
     <p>右键重命名、复制、删除；拖拽顺序；末尾 + 创建。此单机页面不代表复制的协同保证；新增、删除和排序的协同测试请用上面的 schema 6 页面。</p>
     <h2><a href={`?acceptance=inline&case=inline&room=${encodeURIComponent(room)}`}>原生混排与共享冻结 · 双页</a></h2>
