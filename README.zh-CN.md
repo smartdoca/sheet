@@ -4,7 +4,7 @@
 
 可嵌入的 React 协同表格编辑器，基于 Univer Sheets。包负责工作簿模型和表格。宿主负责身份、文件、权限和网络。
 
-许可证为 [AGPL-3.0-only](LICENSE)。
+许可证为 [MIT](LICENSE)。
 
 ## 安装
 

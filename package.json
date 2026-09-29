@@ -1,6 +1,6 @@
 {
   "name": "@smartdoca/sheet",
-  "version": "0.2.0-rc.16",
+  "version": "0.2.0-rc.17",
   "description": "Embeddable React spreadsheet editor powered by Univer Sheets",
   "type": "module",
   "sideEffects": [
@@ -98,7 +98,7 @@
   "publishConfig": {
     "access": "public"
   },
-  "license": "AGPL-3.0-only",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/smartdoca/sheet.git"

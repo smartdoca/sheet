@@ -4,7 +4,7 @@
 
 Embeddable collaborative spreadsheet editor for React, powered by Univer Sheets. The package owns the workbook model and grid. The host owns identity, files, permissions, and the network.
 
-Licensed under [AGPL-3.0-only](LICENSE).
+Licensed under [MIT](LICENSE).
 
 ## Install
 
