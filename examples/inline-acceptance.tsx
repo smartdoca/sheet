@@ -19,6 +19,8 @@ export async function createInlineAcceptance(room='inline-isolated') {
     const editor=useRef<SpreadsheetEditorHandle>(null),target=useRef<SpreadsheetTextTarget|null>(null)
     const [state,setState]=useState<SpreadsheetTextEditState|null>(null),[result,setResult]=useState(''),[readonly,setReadonly]=useState(false),[,render]=useState(0)
     const [candidate,setCandidate]=useState(false),[card,setCard]=useState('')
+    const [previewEnabled,setPreviewEnabled]=useState(true),[previewCount,setPreviewCount]=useState(0)
+    const readyCount=useRef(0)
     const unsubscribe=useRef<(()=>void)|undefined>(undefined)
     useEffect(()=>{notify=()=>render(n=>n+1);return()=>{notify=()=>{};unsubscribe.current?.()}},[])
     function changed(s:SpreadsheetTextEditState|null){
@@ -34,11 +36,15 @@ export async function createInlineAcceptance(room='inline-isolated') {
       try{const t=target.current;if(!t)throw new Error('没有有效候选目标');editor.current?.getNativeText()?.insert(t,{kind:'atomic',node:{type:'user',refId:user.id,label:'@'+user.name}});setCandidate(false)}catch(e){setResult(String(e))}
     }
     function insertLink(){try{const api=editor.current?.getNativeText();if(!api)throw new Error('原生扩展尚未就绪');const t=api.capture();if(!t)throw new Error('请先 F2 编辑单元格');api.insert(t,{kind:'link',text:'需求文档',href:'https://example.com/requirements'})}catch(e){setResult(String(e))}}
+    function insertAttachment(){try{const api=editor.current?.getNativeText(),t=api?.capture();if(!api||!t)throw new Error('请先 F2 编辑单元格');api.insert(t,{kind:'atomic',node:{type:'attachment',refId:'demo-attachment-1',label:'📎 说明.pdf'}})}catch(e){setResult(String(e))}}
     return <div style={{height:'100vh',display:'flex',flexDirection:'column'}}>
       <header style={{padding:8,background:'#fff7df'}}>
         隔离宿主示例 · <output aria-label="协同计数">本地提交 {local} · 远端接收 {received}</output> · 原子扩展实验验证（非正式支持声明）
         <button onClick={()=>setReadonly(v=>!v)}>{readonly?'恢复编辑':'只读'}</button>
         <button onMouseDown={e=>e.preventDefault()} onClick={insertLink} disabled={readonly}>光标处插入链接</button>
+        <button onMouseDown={e=>e.preventDefault()} onClick={insertAttachment} disabled={readonly}>光标处插入附件</button>
+        <button onClick={()=>setPreviewEnabled(v=>!v)}>{previewEnabled?'停用附件预览':'启用附件预览'}</button>
+        <output aria-label="附件预览计数">预览 {previewCount} · 就绪 {readyCount.current}</output>
         <button onClick={()=>setResult(JSON.stringify(editor.current?.getSnapshot().sheets.s.cellData?.[0]?.[0]))}>读取 A1 模型</button>
         <button onClick={()=>setResult(JSON.stringify(editor.current?.getSnapshot().sheets.s.freeze))}>读取冻结模型</button>
         <button onClick={()=>{const b=session.checkpoint(local+received);localStorage.setItem(key,JSON.stringify({...b,update:Array.from(b.update)}));setResult('原谱系 checkpoint 已保存')}}>保存测试 checkpoint</button>
@@ -51,7 +57,7 @@ export async function createInlineAcceptance(room='inline-isolated') {
         <button onMouseDown={e=>e.preventDefault()} onClick={()=>{if(target.current)editor.current?.getNativeText()?.release(target.current);target.current=null;setCandidate(false)}}>取消候选</button>
       </aside>}
       {card&&<aside aria-label="宿主用户卡片" style={{position:'absolute',top:300,left:64,zIndex:1000,background:'#eff6ff',border:'1px solid #93c5fd',padding:16}}>👤 {card} · 这是宿主渲染的卡片</aside>}
-      <div style={{flex:1,minHeight:0}}><SpreadsheetEditor ref={editor} workbookId={room} collaboration={session} readOnly={readonly} showHeader={false} showSaveState={false} onError={e=>setResult(e.message)} onReady={h=>{const api=h.getNativeText(),s=api?.subscribe(changed),n=api?.onNodeEvent(e=>setCard(e?`${users.find(u=>u.id===e.node.refId)?.name??e.node.label} (${e.node.refId})`:''));unsubscribe.current=()=>{s?.();n?.()}}} /></div>
+      <div style={{flex:1,minHeight:0}}><SpreadsheetEditor ref={editor} workbookId={room} collaboration={session} readOnly={readonly} showHeader={false} showSaveState={false} onAttachmentPreview={previewEnabled?event=>{setPreviewCount(n=>n+1);setResult(JSON.stringify({...event,readonly}))}:undefined} onError={e=>setResult(e.message)} onReady={h=>{readyCount.current++;const api=h.getNativeText(),s=api?.subscribe(changed),n=api?.onNodeEvent(e=>setCard(e&&e.node.type==='user'?`${users.find(u=>u.id===e.node.refId)?.name??e.node.label} (${e.node.refId})`:''));unsubscribe.current=()=>{s?.();n?.()}}} /></div>
     </div>
   }
 }

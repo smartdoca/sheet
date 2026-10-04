@@ -50,3 +50,12 @@ export interface SpreadsheetInlineNodeEvent {
   node: SpreadsheetInlineNode
   cell: SpreadsheetTextEditState['cell']
 }
+
+/** A click on an inline attachment label, available in edit and readonly modes. */
+export interface SpreadsheetAttachmentPreviewEvent extends SpreadsheetInlineNodeEvent {
+  phase: 'click'
+  node: SpreadsheetInlineNode & { type: 'attachment' }
+}
+
+/** The host resolves node.refId, checks access and opens its attachment preview. */
+export type SpreadsheetAttachmentPreviewHandler = (event: SpreadsheetAttachmentPreviewEvent) => void | Promise<void>
