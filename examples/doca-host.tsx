@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react'
-import { SpreadsheetEditor, type ResourceAdapter, type SpreadsheetCellSelection, type SpreadsheetEditorHandle, type SpreadsheetRemoteSelection } from '@online-office/univer-sheet'
+import { SpreadsheetEditor, type ResourceAdapter, type SpreadsheetAttachmentPreviewHandler, type SpreadsheetCellSelection, type SpreadsheetEditorHandle, type SpreadsheetRemoteSelection } from '@online-office/univer-sheet'
 import { createExlsxCollaborationSession, restoreExlsxDocument, type ExlsxIncomingUpdate, type ExlsxRecoveryBundle, type ExlsxCollaborationSession, type ExlsxLocalTransaction } from '@online-office/univer-sheet/yjs'
 
 /** Implement these using Doca's existing room, durable outbox and asset services. */
@@ -7,6 +7,8 @@ export interface DocaSheetPlatform {
   bootstrap(): Promise<ExlsxRecoveryBundle>
   sessionId: string
   resources: ResourceAdapter
+  /** Resolve event.node.refId with current asset ACL and open Doca's preview UI. */
+  previewAttachment: SpreadsheetAttachmentPreviewHandler
   /** Must validate epoch/schema, hydrate IndexedDB and preserve original unacknowledged bytes/IDs. */
   restorePending(doc: Awaited<ReturnType<typeof restoreExlsxDocument>>, baseline: ExlsxRecoveryBundle['baseline']): Promise<void>
   enqueue(transaction: ExlsxLocalTransaction): void
@@ -44,6 +46,7 @@ export function DocaSheet({ platform, session, canEdit }: { platform: DocaSheetP
       <SpreadsheetEditor ref={editor} workbookId={session.baseline.workbookId}
         collaboration={session} readOnly={!canEdit} currentSessionId={platform.sessionId}
         resourceAdapter={platform.resources} showHeader={false} showSaveState={false}
+        onAttachmentPreview={event => platform.previewAttachment(event)}
         onSelectionChange={platform.publishSelection} onError={platform.reportError}
       />
     </div>

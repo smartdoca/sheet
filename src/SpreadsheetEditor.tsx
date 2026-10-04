@@ -23,6 +23,8 @@ import {
 import { createDefaultSpreadsheetRuntime } from './runtime'
 import { createTranslator, intlLocale, resolveLocale } from './i18n'
 import { downloadResourceResult } from './resources'
+import { subscribeAttachmentPreview } from './attachmentPreview'
+import type { SpreadsheetAttachmentPreviewHandler } from './inlineTypes'
 import {isFormulaProjection} from './transactionOrigin'
 import { sanitizeWorkbookSnapshot } from './snapshot'
 import { operationForNativeCommand, type ExlsxOperation } from './capabilities'
@@ -137,6 +139,8 @@ export interface SpreadsheetEditorProps {
   onImageUpload?: SpreadsheetImageUploadHandler
   /** Overrides image download handling. Return a Blob/URL for the default browser download, or void when handled. */
   onImageDownload?: SpreadsheetImageDownloadHandler
+  /** Inline attachment clicks, including readonly. The host owns access checks and preview UI. Errors reach onError. */
+  onAttachmentPreview?: SpreadsheetAttachmentPreviewHandler
   onWorkbookNameChange?: (name: string) => void
   onReady?: (handle: SpreadsheetEditorHandle) => void
   onSelectionChange?: (selection: SpreadsheetCellSelection | null) => void
@@ -324,6 +328,7 @@ export const SpreadsheetEditor = forwardRef<
     style,
     onImageUpload,
     onImageDownload,
+    onAttachmentPreview,
     onWorkbookNameChange,
     onReady,
     onSelectionChange,
@@ -383,6 +388,8 @@ export const SpreadsheetEditor = forwardRef<
   const resourceAdapterRef = useRef(resourceAdapter)
   const onImageUploadRef = useRef(onImageUpload)
   const onImageDownloadRef = useRef(onImageDownload)
+  const onAttachmentPreviewRef = useRef(onAttachmentPreview)
+  const onErrorRef = useRef(onError)
   const resolvedCommentMarkersRef = useRef(new Map<string, Array<{ marker: SpreadsheetCommentMarker; range: SpreadsheetCellRange }>>())
   cellRenderersRef.current = cellRenderers
   commentMarkersRef.current = commentMarkers
@@ -399,6 +406,8 @@ export const SpreadsheetEditor = forwardRef<
   resourceAdapterRef.current = resourceAdapter
   onImageUploadRef.current = onImageUpload
   onImageDownloadRef.current = onImageDownload
+  onAttachmentPreviewRef.current = onAttachmentPreview
+  onErrorRef.current = onError
   const requireOperation = useCallback((operation: ExlsxOperation) => {
     const capability = collaborationRef.current?.capabilities?.[operation]
     if (readOnlyRef.current) throw Object.assign(new Error('Spreadsheet is read only'), { code: 'READ_ONLY' })
@@ -1611,6 +1620,11 @@ export const SpreadsheetEditor = forwardRef<
           if (autoSave) saveTimerRef.current = setTimeout(() => void handleRef.current.save(), 0)
         }
         runtime.applyLocale?.(localeRef.current, languagePackRef.current)
+        if (runtime.nativeText) customComponentDisposers.push(subscribeAttachmentPreview(
+          runtime.nativeText,
+          () => onAttachmentPreviewRef.current,
+          error => onErrorRef.current?.(error),
+        ))
         onReady?.(handleRef.current)
       } catch (error) {
         const normalized = toError(error)

@@ -1,6 +1,6 @@
 {
   "name": "@smartdoca/sheet",
-  "version": "0.2.0-rc.17",
+  "version": "0.2.0-rc.18",
   "description": "Embeddable React spreadsheet editor powered by Univer Sheets",
   "type": "module",
   "sideEffects": [

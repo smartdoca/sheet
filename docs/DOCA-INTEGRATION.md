@@ -30,6 +30,23 @@ const session = await createExlsxCollaborationSession({
 
 资源上传、解析、下载及撤权由宿主的 `resourceAdapter` 实现。永久评论正文与 ACL 由 Doca 保存；表格包只处理稳定区域锚点和视图定位。编辑权限由宿主决定，并通过 `readOnly` 与 `session.setReadOnly` 同时收口。
 
+附件预览通过 `SpreadsheetEditor.onAttachmentPreview` 接入：
+
+```tsx
+<SpreadsheetEditor
+  workbookId={resourceId}
+  onAttachmentPreview={async event => {
+    // Doca 使用 event.node.refId 查询附件并校验当前访问权限，再打开自己的预览界面。
+    await platform.previewAttachment(event)
+  }}
+  onError={platform.reportError}
+/>
+```
+
+回调类型为包导出的 `SpreadsheetAttachmentPreviewHandler`，参数 `SpreadsheetAttachmentPreviewEvent` 包含 `phase: 'click'`、`node: { type: 'attachment', refId, label }` 和 `cell: { workbookId, sheetId, row, column }`。行列坐标从 0 开始，仅用于当前点击位置，不能作为永久锚点。只命中原生内联附件标签的点击；悬停、普通文字、用户或文档节点不触发附件预览。
+
+只读模式仍可预览，回调不需要上传适配器或编辑权限，也不产生内容事务。附件元信息、访问校验、临时预览地址和预览界面均由 Doca 实现，文档仍只保存稳定资源 ID。未传回调时不执行预览；替换或移除回调不会重建工作簿。同步异常和 Promise 拒绝交给最新的 `onError`，编辑器释放后忽略未完成预览的异常。`examples/doca-host.tsx` 演示了通过平台方法接入预览的方式。
+
 ## 能力判断
 
 界面和宿主命令必须读取 `session.capabilities`，不要依赖 Univer 私有命令名推断安全性。包内能力映射只服务于固定版本的 Univer 运行时。

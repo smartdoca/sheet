@@ -34,6 +34,7 @@ export function Sheet({ id }: { id: string }) {
 | `collaboration` | `CollaborationAdapter` | Host bridge for workbook changes. |
 | `persistence` | `WorkbookPersistenceAdapter` | Optional local persistence. Do not add a second autosave path beside the host. |
 | `resourceAdapter` | `ResourceAdapter` | Host file and image storage. |
+| `onAttachmentPreview` | `SpreadsheetAttachmentPreviewHandler` | Inline attachment label clicks, including readonly. The host opens the preview. |
 | `remoteSelections` | `SpreadsheetRemoteSelection[]` | Ephemeral selections. Identity and color come from the host session. |
 | `currentSessionId` | `string` | This tab's session. Other tabs of the same user stay visible. |
 | `commentMarkers` | `SpreadsheetCommentMarker[]` | Host-owned comments on stable anchors. |
@@ -56,6 +57,21 @@ export function Sheet({ id }: { id: string }) {
 `initialRows`, `initialColumns`, `autoFitContent`, menus, image upload, and inline actions are also on `SpreadsheetEditorProps`.
 
 Updating props, readonly, or selection must not rebuild the workbook.
+
+## Attachment preview
+
+```tsx
+<SpreadsheetEditor
+  workbookId={id}
+  onAttachmentPreview={async ({ node, cell }) => {
+    // Resolve node.refId with the host's current asset permissions.
+    await openAttachmentPreview(node.refId, cell);
+  }}
+  onError={reportError}
+/>
+```
+
+`SpreadsheetAttachmentPreviewEvent` contains `phase: 'click'`, `node: { type: 'attachment', refId, label }`, and `cell: { workbookId, sheetId, row, column }` (zero-based coordinates). Only clicks on the native inline attachment label trigger it; hover and clicks elsewhere in the cell do not. Preview works in readonly mode and does not change workbook content. Replacing or removing the callback does not rebuild the editor. Synchronous throws and rejected promises reach the latest `onError`; pending errors are ignored after disposal. No callback means no preview action. Doca owns metadata lookup, access checks, preview URLs and UI.
 
 ## Collaboration
 
