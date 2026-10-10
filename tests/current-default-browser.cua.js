@@ -5,7 +5,7 @@ export async function verifyDefaultInsertions(a,b) {
   const select=async(tab,value)=>{const input=tab.playwright.getByRole('textbox',{exact:true});await input.fill(value);await input.press('Enter')}
   const read=async tab=>{await button(tab,'读取功能模型').click();return JSON.parse(await tab.playwright.getByLabel('功能模型',{exact:true}).innerText())}
   const assert=(value,message)=>{if(!value)throw new Error(message)}
-  for(const name of ['冻结','筛选','排序','条件格式','下拉列表','合并单元格'])assert(await button(a,name).isEnabled(),name+' enabled by default')
+  for(const name of ['冻结','筛选','排序','条件格式','数据验证','合并单元格'])assert(await button(a,name).isEnabled(),name+' enabled by default')
   await select(a,'A1')
   await button(a,'插入').click();await a.playwright.getByRole('menuitem',{name:'超链接',exact:true}).click()
   await a.playwright.getByRole('textbox',{name:'链接显示文字',exact:true}).fill('需求链接')
@@ -26,7 +26,7 @@ export async function verifyDefaultInsertions(a,b) {
   await button(a,'读取功能模型').waitFor({state:'visible',timeoutMs:10000})
   assert(JSON.stringify((await read(a)).rows)===JSON.stringify(first.rows),'checkpoint preserves references')
   await button(a,'只读').click()
-  for(const name of ['插入','冻结','筛选','排序','条件格式','下拉列表'])assert(!await button(a,name).isEnabled(),name+' readonly')
+  for(const name of ['插入','冻结','筛选','排序','条件格式','数据验证'])assert(!await button(a,name).isEnabled(),name+' readonly')
   assert(await button(a,'评论记录').isEnabled(),'comment permission stays independent')
   return {model:first,counter:await a.playwright.getByLabel('协同计数',{exact:true}).innerText()}
 }
