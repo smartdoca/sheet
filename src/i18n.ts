@@ -81,7 +81,7 @@ const MESSAGES: ReadonlyArray<readonly [string, string, string]> = [
   ['toolbar.filter', '筛选', 'Filter'],
   ['toolbar.sort', '排序', 'Sort'],
   ['toolbar.conditional', '条件格式', 'Conditional format'],
-  ['toolbar.dropdown', '下拉列表', 'Dropdown list'],
+  ['toolbar.dropdown', '数据验证', 'Data validation'],
   ['toolbar.more', '更多功能', 'More'],
   ['toolbar.unavailable', '{label}：{reason}', '{label}: {reason}'],
   ['workbook.name', '工作簿名称', 'Workbook name'],

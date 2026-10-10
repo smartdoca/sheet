@@ -18,7 +18,7 @@ export async function verifyFeatureCheckpoint(tab) {
   assert(JSON.stringify(resource('SHEET_FILTER_PLUGIN').cachedFilteredOut)==='[3,4]','filter recomputed after sorted projection')
   assert(model.anchors[0].ranges[0].startRow===3,'comment follows record')
   await button('只读').click()
-  for(const name of ['合并单元格','冻结','筛选','排序','条件格式','下拉列表'])assert(!await button(name).isEnabled(),name+' readonly')
+  for(const name of ['合并单元格','冻结','筛选','排序','条件格式','数据验证'])assert(!await button(name).isEnabled(),name+' readonly')
   assert(await button('评论记录').isEnabled(),'comment permission independent of edit')
   assert(!(await tab.playwright.getByRole('alert').innerText()),'no editor error')
   return {model,counter:await tab.playwright.getByLabel('协同计数',{exact:true}).innerText(),idleStart:Date.now()}
