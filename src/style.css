@@ -252,6 +252,24 @@
   height: 100%;
 }
 
+.uos-editor__select-all {
+  position: absolute;
+  z-index: 12;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  color: #84918c;
+  background: #f5f7f8;
+  border: 0;
+  border-right: 1px solid #d5dce0;
+  border-bottom: 1px solid #d5dce0;
+  cursor: pointer;
+}
+.uos-editor__select-all:hover { color: #176b3a; background: #eaf3ee; }
+.uos-editor__select-all[aria-pressed="true"] { color: #176b3a; background: #dceee3; }
+.uos-editor__select-all:active { background: #cee4d7; }
+.uos-editor__select-all:focus-visible { outline: 2px solid #168144; outline-offset: -2px; }
+
 @media (max-width: 720px) {
   .uos-editor__header { grid-template-columns: auto 1fr auto; }
   .uos-editor__brand { display: none; }

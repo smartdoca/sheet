@@ -43,3 +43,12 @@
 .uos-dropdown-dialog .uos-dropdown-footer>.uos-dropdown-confirm:hover:not(:disabled){background:#2862e8;border-color:#2862e8;color:#fff}
 .uos-dropdown-dialog [role=alert]{padding:8px 10px;border-radius:6px;background:#fff2f0;color:#d92d37;font-size:13px}
 @media(max-width:560px){.uos-dropdown-dialog{padding:20px}.uos-dropdown-settings{gap:12px}.uos-dropdown-settings .uos-dropdown-color-toggle{padding-left:12px}.uos-dropdown-settings>button{margin-left:0}.uos-dropdown-row{gap:7px;grid-template-columns:18px 26px minmax(0,1fr) 26px}.uos-dropdown-dialog .uos-dropdown-footer>button{min-width:64px;padding:0 12px}}
+
+/* Native cell dropdowns are portalled outside the editor root. */
+[data-u-comp="sheets-dropdown-list"] { padding-block:8px 4px; font-size:14px; line-height:22px; }
+[data-u-comp="sheets-dropdown-list"] input { min-height:36px; padding:6px 10px; font-size:14px; line-height:22px; }
+[data-u-comp="sheets-dropdown-list"]>.univer-text-xs { padding:8px 14px 4px; font-size:14px; line-height:22px; }
+[data-u-comp="sheets-dropdown-list"]>.univer-overflow-y-auto { max-height:240px; gap:4px; }
+[data-u-comp="sheets-dropdown-list"]>.univer-flex-col>.univer-cursor-pointer { min-height:40px; padding:6px 8px; }
+[data-u-comp="sheets-dropdown-list"] .univer-rounded-full { height:26px; padding-inline:10px; font-size:14px; line-height:22px; }
+[data-u-comp="sheets-dropdown-list"] a { min-height:36px; padding:6px 8px; font-size:14px; line-height:22px; }

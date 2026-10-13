@@ -5,6 +5,7 @@ const MESSAGES: ReadonlyArray<readonly [string, string, string]> = [
   ['sheet.noun', '工作表', 'Sheet'],
   ['sheet.new', '工作表 {number}', 'Sheet {number}'],
   ['sheet.add', '新增工作表', 'Add worksheet'],
+  ['sheet.selectAll', '全选', 'Select all'],
   ['action.save', '保存', 'Save'],
   ['action.undo', '撤销', 'Undo'],
   ['action.redo', '重做', 'Redo'],

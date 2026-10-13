@@ -1,6 +1,7 @@
 import * as Y from 'yjs'
 import type {WorkbookSnapshot} from './types'
 import {comparePosition,positionBetween,validatePosition,type AxisPosition} from './structuralAxis'
+import {DEFAULT_WORKSHEET_DIMENSIONS} from './worksheetDefaults'
 
 export const SHEET_SEEDS='exlsx:sheet-seeds'
 export const SHEET_POSITIONS='exlsx:sheet-positions'
@@ -26,9 +27,11 @@ export class WorksheetCollection {
   dispose(){for(const name of SHEET_COLLECTIONS)this.doc.getMap(name).unobserve(this.invalidate)}
   private generation(){let n=0;for(const key of this.doc.getMap(SHEET_DELETIONS).keys()){const [id]=JSON.parse(key);if(typeof id==='string'&&id.startsWith(recoveryPrefix))n=Math.max(n,Number(id.slice(recoveryPrefix.length))+1)}return n}
   seed(id:string):WorkbookSnapshot['sheets'][string]{
-    const base=this.baseline.sheets[id]??this.doc.getMap<Seed>(SHEET_SEEDS).get(id)
-    if(base)return base as WorkbookSnapshot['sheets'][string]
-    if(id.startsWith(recoveryPrefix)&&/^(0|[1-9]\d*)$/.test(id.slice(recoveryPrefix.length))&&Number(id.slice(recoveryPrefix.length))<=this.generation())return {id,name:'恢复工作表',rowCount:200,columnCount:26,cellData:{}} as WorkbookSnapshot['sheets'][string]
+    const base=this.baseline.sheets[id]
+    if(base)return base
+    const created=this.doc.getMap<Seed>(SHEET_SEEDS).get(id)
+    if(created)return {...created,...DEFAULT_WORKSHEET_DIMENSIONS} as WorkbookSnapshot['sheets'][string]
+    if(id.startsWith(recoveryPrefix)&&/^(0|[1-9]\d*)$/.test(id.slice(recoveryPrefix.length))&&Number(id.slice(recoveryPrefix.length))<=this.generation())return {id,name:'恢复工作表',rowCount:200,columnCount:26,cellData:{},...DEFAULT_WORKSHEET_DIMENSIONS} as WorkbookSnapshot['sheets'][string]
     throw new Error('UNKNOWN_WORKSHEET')
   }
   known(){return [...new Set([...this.baseline.sheetOrder,...this.doc.getMap(SHEET_SEEDS).keys(),...this.doc.getMap(SHEET_POSITIONS).keys(),`${recoveryPrefix}${this.generation()}`])]}

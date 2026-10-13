@@ -1,6 +1,7 @@
 import {createInlineUploadBatch} from './inlineUploads'
 import {FloatingObjects} from './FloatingObjects'
 import {SheetBarAdd} from './SheetBarAdd'
+import {SelectAllCorner} from './SelectAllCorner'
 import {InlineClipboardUploads} from './InlineClipboardUploads'
 import {nativeStructuralEdit} from './structuralCommands'
 import {
@@ -12,7 +13,7 @@ import {
   useRef,
   useState,
 } from 'react'
-import { BorderStyleTypes, BorderType } from '@univerjs/core'
+import { BorderStyleTypes, BorderType, mergeWorksheetSnapshotWithDefault } from '@univerjs/core'
 import { SetStyleCommand } from '@univerjs/sheets'
 
 import {
@@ -27,6 +28,7 @@ import { subscribeAttachmentPreview } from './attachmentPreview'
 import type { SpreadsheetAttachmentPreviewHandler } from './inlineTypes'
 import {isFormulaProjection} from './transactionOrigin'
 import { sanitizeWorkbookSnapshot } from './snapshot'
+import { DEFAULT_WORKSHEET_DIMENSIONS } from './worksheetDefaults'
 import { operationForNativeCommand, type ExlsxOperation } from './capabilities'
 import { snapshotToXlsx, xlsxToSnapshot } from './xlsx'
 import type { XlsxOptions, XlsxWarning } from './xlsx'
@@ -562,6 +564,7 @@ export const SpreadsheetEditor = forwardRef<
       sheetName,
       Math.max(1, Math.min(MAX_SHEET_ROWS, initialRows)),
       Math.max(1, Math.min(MAX_SHEET_COLUMNS, initialColumns)),
+      { sheet: { ...DEFAULT_WORKSHEET_DIMENSIONS } },
     )
     workbook.getSheets().find(sheet=>sheet.getSheetName()===sheetName)?.activate()
   }, [initialColumns, initialRows, t])
@@ -1374,7 +1377,12 @@ export const SpreadsheetEditor = forwardRef<
         const workbook = runtime.univerAPI.createWorkbook(
           loaded?.snapshot || initialSnapshot
             ? structuredClone(sanitizeWorkbookSnapshot((loaded?.snapshot ?? initialSnapshot)!))
-            : { id: workbookId, name: workbookName ?? tRef.current('workbook.untitled') },
+            : {
+                id: workbookId,
+                name: workbookName ?? tRef.current('workbook.untitled'),
+                sheetOrder: ['sheet-01'],
+                sheets: { 'sheet-01': mergeWorksheetSnapshotWithDefault({ ...DEFAULT_WORKSHEET_DIMENSIONS }) },
+              },
         )
         hasAnalysisChartsRef.current = workbook.getSheets().some((sheet) =>
           sheet.getAllFloatDoms().some((item) => item.componentKey === ANALYSIS_CHART_COMPONENT),
@@ -1934,6 +1942,7 @@ export const SpreadsheetEditor = forwardRef<
       )}
       {toolbarLayout === 'two-row' && <OfficeToolbar handle={handleRef.current} readOnly={readOnly} capabilities={collaboration?.capabilities} menus={menus} end={toolbarEnd} inlineActions={inlineActions} t={t} />}
       <div ref={containerRef} className={['uos-editor__canvas', classNames?.canvas].filter(Boolean).join(' ')} style={styles?.canvas} />
+      {!loading&&<SelectAllCorner root={editorRef} canvas={containerRef} handle={handleRef.current} label={t('sheet.selectAll')} onError={onError}/>}
       <CellObjects handle={handleRef.current} renderer={renderCellObject} t={t} />
       {!loading&&collaboration?.getFloatingObjects&&<FloatingObjects handle={handleRef.current} session={collaboration} readOnly={readOnly} t={t}/>}
       {collaboration?.capabilities?.inlineImage.supported&&<InlineClipboardUploads handle={handleRef.current} readOnly={readOnly} t={t}/>}
