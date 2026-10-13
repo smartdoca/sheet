@@ -279,7 +279,10 @@ export interface SpreadsheetWorkbook {
   setName(name: string): unknown
   undo(): unknown
   redo(): unknown
-  create(name: string, rows: number, columns: number): unknown
+  create(name: string, rows: number, columns: number, options?: {
+    index?: number
+    sheet?: Partial<WorkbookSnapshot['sheets'][string]>
+  }): unknown
   deleteSheet(sheet: SpreadsheetWorksheet | string): boolean
   duplicateSheet(sheet: SpreadsheetWorksheet): SpreadsheetWorksheet
   moveSheet(sheet: SpreadsheetWorksheet, index: number): SpreadsheetWorkbook

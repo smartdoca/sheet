@@ -35,6 +35,18 @@ jobs:
         with:
           node-version: "22"
           registry-url: https://registry.npmjs.org
+      - name: Check whether this commit is already published
+        id: published
+        run: |
+          RELEASE_PACKAGE_NAME=$(node -p "require('./package.json').name")
+          RELEASE_PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          RELEASE_PUBLISHED_HEAD=$(npm view --userconfig=/dev/null "${RELEASE_PACKAGE_NAME}@${RELEASE_PACKAGE_VERSION}" gitHead --json 2>/dev/null || true)
+          if [[ "$RELEASE_PUBLISHED_HEAD" == "\"$(git rev-parse HEAD)\"" ]]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+            echo "This commit is already published as ${RELEASE_PACKAGE_NAME}@${RELEASE_PACKAGE_VERSION}."
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
       - name: Enable Yarn 1
         run: corepack enable && corepack prepare yarn@1.22.22 --activate
       - name: Install dependencies
@@ -42,6 +54,7 @@ jobs:
       - name: Build the package
         run: yarn build
       - name: Publish
+        if: steps.published.outputs.exists != 'true'
         run: npm publish --access public --provenance --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

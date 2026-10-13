@@ -1,12 +1,12 @@
-import {CommandType,ICommandService,Injector,IUniverInstanceService,RANGE_TYPE,UniverInstanceType,type IRange,type Workbook} from '@univerjs/core'
-import {SheetsSelectionsService} from '@univerjs/sheets'
+import {Injector,IUniverInstanceService,UniverInstanceType,type Workbook} from '@univerjs/core'
 import {ISheetClipboardService} from '@univerjs/sheets-ui'
 import {IClipboardInterfaceService,IMessageService} from '@univerjs/ui'
 import {IDocClipboardService} from '@univerjs/docs-ui'
 import type {SpreadsheetNativeText} from './inlineTypes'
 import {inlinePlainText,validateInlineDocument} from './inlineMedia'
 import {decodeInlineClipboard,encodeInlineClipboard,inlineTextFragment,type InlineClipboardFragment} from './inlineClipboard'
-import {clipSelectAllCopyRange,contentSelectionRange} from './selectAllCopy'
+import {clipSelectAllCopyRange} from './selectAllCopy'
+import {attachNativeSelectAll} from './nativeSelectAll'
 
 /** Pinned engine adapter. Native paste still owns selection, mutations and undo.
  * HTML carries only validated document fragments, never a second saving channel.
@@ -136,29 +136,6 @@ export function attachNativeClipboard(injector:Injector,native:SpreadsheetNative
     if(native.getState()&&!native.getState()!.formula){const fragment=parseDoc(undefined,html);if(fragment)return Promise.resolve(insertCaptured(fragment))}
     return run(html,()=>clipboardFallback.call(this,html,text,files))
   }
-  // Select-all must not grow from the active cell. A click beside data otherwise
-  // becomes only the span between that cell and the nearby content.
-  const commands=injector.get(ICommandService),selections=injector.get(SheetsSelectionsService)
-  const selectAllId='sheet.command.select-all'
-  let applying=false
-  function selectContent(){
-    const book=injector.get(IUniverInstanceService).getCurrentUnitOfType<Workbook>(UniverInstanceType.UNIVER_SHEET),sheet=book?.getActiveSheet()
-    if(!book||!sheet)return false
-    const range=contentSelectionRange(sheet.getCellMatrix().getMatrix(),sheet.getMergeData())
-    range.endRow=Math.min(range.endRow,Math.max(0,sheet.getRowCount()-1))
-    range.endColumn=Math.min(range.endColumn,Math.max(0,sheet.getColumnCount()-1))
-    const merged=sheet.getMergedCell(range.startRow,range.startColumn)
-    const primary=merged?{...merged,actualRow:range.startRow,actualColumn:range.startColumn,rangeType:RANGE_TYPE.NORMAL,isMerged:true,isMergedMainCell:merged.startRow===range.startRow&&merged.startColumn===range.startColumn}:{startRow:range.startRow,startColumn:range.startColumn,endRow:range.startRow,endColumn:range.startColumn,actualRow:range.startRow,actualColumn:range.startColumn,rangeType:RANGE_TYPE.NORMAL,isMerged:false,isMergedMainCell:false}
-    applying=true
-    try{selections.setSelections(book.getUnitId(),sheet.getSheetId(),[{range,primary,style:null}]);return true}
-    finally{applying=false}
-  }
-  if(commands.hasCommand(selectAllId))commands.unregisterCommand(selectAllId)
-  const selectAll=commands.registerCommand({id:selectAllId,type:CommandType.COMMAND,handler:()=>selectContent()})
-  const selectionWatch=selections.selectionChanged$.subscribe(list=>{
-    if(applying)return
-    const range=list?.at(-1)?.range as IRange|undefined
-    if(range?.rangeType===RANGE_TYPE.ALL)selectContent()
-  })
-  return {dispose(){document.removeEventListener('paste',onNativePaste,true);hook.dispose();selectionWatch.unsubscribe();selectAll.dispose();docs.copy=docCopy;docs.paste=docPaste;docs.legacyPaste=docClipboardFallback;service.generateCopyContent=generate;service.paste=paste;service.legacyPaste=clipboardFallback;pending=null}}
+  const selectAll=attachNativeSelectAll(injector)
+  return {dispose(){document.removeEventListener('paste',onNativePaste,true);hook.dispose();selectAll.dispose();docs.copy=docCopy;docs.paste=docPaste;docs.legacyPaste=docClipboardFallback;service.generateCopyContent=generate;service.paste=paste;service.legacyPaste=clipboardFallback;pending=null}}
 }
