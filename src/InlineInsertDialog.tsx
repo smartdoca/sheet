@@ -8,6 +8,7 @@ import type {EditorTranslator} from './i18n'
 export function InlineInsertDialog({handle,mode,actions,onClose,readOnly,t}:{handle:SpreadsheetEditorHandle;mode:'link'|'document';actions?:SpreadsheetInlineActions;onClose:()=>void;readOnly:boolean;t:EditorTranslator}) {
   const [ready,setReady]=useState(false),[error,setError]=useState(''),[text,setText]=useState(''),[href,setHref]=useState('')
   const target=useRef<SpreadsheetTextTarget|null>(null),api=useRef<SpreadsheetNativeText|null>(null),controller=useRef<AbortController|null>(null)
+  const textInput=useRef<HTMLInputElement>(null)
   const current=useRef({handle,readOnly,onClose,actions,t});current.current={handle,readOnly,onClose,actions,t}
   useEffect(()=>{
     const abort=new AbortController();controller.current=abort
@@ -35,6 +36,14 @@ export function InlineInsertDialog({handle,mode,actions,onClose,readOnly,t}:{han
     return()=>{abort.abort();if(target.current)api.current?.release(target.current);target.current=null}
   },[mode])
   useEffect(()=>{if(readOnly){controller.current?.abort();if(target.current)api.current?.release(target.current);target.current=null;setReady(false);setError(t('inline.readOnlyCancelled'))}},[readOnly,t])
+  useEffect(()=>{if(ready&&mode==='link'&&!readOnly)textInput.current?.focus()},[ready,mode,readOnly])
+  const cancel=()=>{
+    controller.current?.abort()
+    if(target.current)api.current?.release(target.current)
+    target.current=null
+    if(!readOnly)api.current?.focus()
+    onClose()
+  }
   const insert=()=>{
     try{
       if(readOnly||!target.current||!api.current)throw new Error(t('inline.targetLost'))
@@ -46,7 +55,8 @@ export function InlineInsertDialog({handle,mode,actions,onClose,readOnly,t}:{han
     }catch(e){setError(String(e))}
   }
   return <div className="uos-inline-insert-form" role="dialog" aria-label={mode==='link'?t('inline.linkTitle'):t('inline.documentTitle')}>
-    {mode==='link'?<><label>{t('inline.displayText')}<input aria-label={t('inline.displayTextLabel')} value={text} disabled={!ready||readOnly} onChange={e=>setText(e.target.value)}/></label><label>{t('inline.href')}<input aria-label={t('inline.hrefLabel')} value={href} disabled={!ready||readOnly} onChange={e=>setHref(e.target.value)} placeholder={t('inline.hrefPlaceholder')}/></label><button type="button" onMouseDown={e=>e.preventDefault()} disabled={!ready||readOnly||!href} onClick={insert}>{t('inline.insertLink')}</button></>:<p>{t('inline.documentHint')}</p>}
+    {mode==='link'?<><label>{t('inline.displayText')}<input ref={textInput} aria-label={t('inline.displayTextLabel')} value={text} disabled={!ready||readOnly} onChange={e=>setText(e.target.value)}/></label><label>{t('inline.href')}<input aria-label={t('inline.hrefLabel')} value={href} disabled={!ready||readOnly} onChange={e=>setHref(e.target.value)} placeholder={t('inline.hrefPlaceholder')}/></label><button type="button" onMouseDown={e=>e.preventDefault()} disabled={!ready||readOnly||!href} onClick={insert}>{t('inline.insertLink')}</button></>:<p>{t('inline.documentHint')}</p>}
+    <button type="button" onMouseDown={e=>e.preventDefault()} onClick={cancel}>{t('inline.cancel')}</button>
     {!ready&&!error&&<p>{t('inline.preparing')}</p>}
     {error&&<p role="alert">{error}</p>}
   </div>
