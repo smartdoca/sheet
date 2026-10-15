@@ -88,12 +88,15 @@ export function operationForNativeCommand(id: string): ExlsxOperation | undefine
   if(id==='sheet.command.move-range'||id==='sheet.mutation.move-range')return 'cellEdit'
   if(id==='sheet.mutation.reorder-range')return 'sort'
   if(isDerivedLayoutCommand(id))return undefined
-  // Clearing a drawing selection is also used while switching sheets/readonly.
-  // It is transient presence, not image content or a resource write.
-  if (['drawing.operation.set-drawing-selected', 'sheet.operation.clear-drawing-transformer', 'sheet.operation.close-image-crop'].includes(id)) return undefined
+  // Clearing selections and closing panels also run while switching sheets/readonly.
+  // These operations only change transient UI state.
+  if (['drawing.operation.set-drawing-selected', 'sheet.operation.clear-drawing-transformer', 'sheet.operation.close-image-crop', 'sheet.operation.close-hyper-link-popup'].includes(id)) return undefined
   if (id === 'ui-sheet.command.show-menu-list') return 'hide'
   if (/^sheet\.menu\.(delete|cell-insert)$/.test(id)) return 'dimensionGrow'
   if (/defined-name/.test(id)) return 'namedRanges'
+  // Unlinking edits the cell's rich text, which already participates in the
+  // content register. It does not create native hyperlink resources.
+  if (['sheets.command.cancel-hyper-link', 'sheets.command.cancel-rich-hyper-link'].includes(id)) return 'inlineLink'
   if (/hyper-link/.test(id)) return 'nativeHyperlink'
   if (/gridlines/.test(id)) return 'gridAppearance'
   if (/conditional/.test(id)) return 'conditionalFormat'

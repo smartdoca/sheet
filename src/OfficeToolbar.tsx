@@ -28,6 +28,10 @@ export function OfficeToolbar({handle,readOnly,capabilities,menus=[],end,inlineA
   useEffect(()=>runtime?.formatPainter?.subscribe(()=>setPainterMode(runtime.formatPainter!.getMode())),[runtime])
   const [format,setFormat]=useState(empty),[width,setWidth]=useState(1400),[popup,setPopup]=useState<Popup>(null)
   const [position,setPosition]=useState({left:0,top:0}),[error,setError]=useState(''),[border,setBorder]=useState('#333333'),[hex,setHex]=useState('#2563eb'),[category,setCategory]=useState('sheet')
+  const closePopup=()=>{
+    if(!readOnly&&(popup==='link'||popup==='document'))handle.getNativeText()?.focus()
+    setPopup(null)
+  }
   const formats=NUMBER_FORMATS.map(([key,pattern])=>[t(key),pattern] as [string,string])
   useEffect(()=>{
     let frame=0
@@ -48,11 +52,11 @@ export function OfficeToolbar({handle,readOnly,capabilities,menus=[],end,inlineA
   useEffect(()=>{
     if(!popup)return
     const outside=(e:PointerEvent)=>{if(popup!=='document'&&!(e.target as Element).closest?.('[data-office-popover],.uos-office-toolbar'))setPopup(null)}
-    const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();setPopup(null)}}
-    const close=()=>setPopup(null)
+    const key=(e:KeyboardEvent)=>{if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closePopup()}}
+    const close=()=>closePopup()
     window.addEventListener('pointerdown',outside,true);window.addEventListener('keydown',key,true);window.addEventListener('resize',close)
     return()=>{window.removeEventListener('pointerdown',outside,true);window.removeEventListener('keydown',key,true);window.removeEventListener('resize',close)}
-  },[popup])
+  },[popup,handle,readOnly])
   const style=format.style,disabled=readOnly||!format.selection||capabilities?.cellStyle.enabled===false
   const cellDisabled=disabled||!!format.editing,textDisabled=disabled||!!format.formula
   const run=(fn:()=>unknown,close=false)=>{void Promise.resolve().then(fn).then(result=>{if(result===false)throw new Error(t('action.notAppliedDetail'));setError('');setFormat(handle.getFormatState());if(close)setPopup(null)}).catch(e=>setError(String(e)))}
@@ -117,7 +121,7 @@ export function OfficeToolbar({handle,readOnly,capabilities,menus=[],end,inlineA
     {error&&<button className="uos-office-message" role="alert" onClick={()=>setError('')}>{error} ×</button>}
     {popup&&createPortal(<div data-office-popover className={`uos-office-popover ${popup==='menu'?'uos-office-cascade':''}`} style={{left:position.left,top:position.top,maxHeight:`calc(100vh - ${position.top+8}px)`}}>
       {popup==='menu'?<><nav aria-label={t('menu.categories')}>{Object.keys(menuItems).map(c=><button key={c} aria-current={category===c||undefined} onMouseDown={preserve} onMouseEnter={()=>setCategory(c)} onClick={()=>setCategory(c)}>{t(`menu.${c}`)}<Icon name="arrow"/></button>)}</nav><div role="menu" aria-label={t(`menu.${category}`)}>{menuItems[category]}</div></>:<>
-      <header><span>{t(`popup.${popup}`)}</span><button aria-label={t('popup.close')} onMouseDown={preserve} onClick={()=>setPopup(null)}>×</button></header>
+      <header><span>{t(`popup.${popup}`)}</span><button aria-label={t('popup.close')} onMouseDown={preserve} onClick={closePopup}>×</button></header>
       {popup==='floating'&&<FloatingInsertDialog handle={handle} readOnly={readOnly} t={t}/>}
       {(popup==='link'||popup==='document')&&<InlineInsertDialog handle={handle} mode={popup} actions={inlineActions} readOnly={readOnly} onClose={()=>setPopup(null)} t={t}/>}
       {(popup==='inlineImage'||popup==='inlineAttachment')&&<InlineResourceDialog handle={handle} kind={popup==='inlineImage'?'image':'attachment'} readOnly={readOnly} onClose={()=>setPopup(null)} t={t}/>}

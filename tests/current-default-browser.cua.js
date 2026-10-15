@@ -1,5 +1,46 @@
 // Run on an isolated features fixture from the installed package, with two pages.
 // Uses native UI only; model reads come from the fixture's public read button.
+export async function verifyHyperlinkCancellation(a,b) {
+  const button=(tab,name)=>tab.playwright.getByRole('button',{name,exact:true})
+  const select=async()=>{const input=a.playwright.getByRole('textbox',{exact:true});await input.fill('A1');await input.press('Enter')}
+  const read=async tab=>{await button(tab,'读取功能模型').click();return JSON.parse(await tab.playwright.getByLabel('功能模型',{exact:true}).innerText()).rows}
+  const assert=(value,message)=>{if(!value)throw new Error(message)}
+  const before=JSON.stringify(await read(a)),counter=await a.playwright.getByLabel('协同计数',{exact:true}).innerText()
+  for(const method of ['cancel','close','escape','outside']) {
+    await select()
+    await button(a,'插入').click();await a.playwright.getByRole('menuitem',{name:'超链接',exact:true}).click()
+    const dialog=a.playwright.getByRole('dialog',{name:'插入超链接',exact:true})
+    await dialog.getByRole('button',{name:'取消',exact:true}).waitFor({state:'visible'})
+    await a.playwright.getByRole('textbox',{name:'链接显示文字',exact:true}).fill('不应插入')
+    await a.playwright.getByRole('textbox',{name:'链接地址',exact:true}).fill('https://example.com/cancel')
+    if(method==='cancel')await button(a,'取消').click()
+    else if(method==='close')await button(a,'关闭工具栏菜单').click()
+    else if(method==='escape')await a.playwright.getByRole('textbox',{name:'链接地址',exact:true}).press('Escape')
+    else await button(a,'读取功能模型').click()
+    await dialog.waitFor({state:'hidden'})
+    if(method!=='outside') {
+      assert((await a.playwright.getByLabel('原生文本草稿',{exact:true}).innerText()).includes('记录'),'cancel preserves cell draft')
+      // The next Esc must reach the native cell editor after focus is restored.
+      await a.pressKey(null,'Escape')
+    }else{const input=a.playwright.getByRole('textbox',{exact:true});await input.fill('A2');await input.press('Enter')}
+    await button(a,'冻结').and(a.playwright.locator(':enabled')).waitFor({state:'visible'})
+    assert(JSON.stringify(await read(a))===before,method+' leaves content unchanged')
+    assert(await a.playwright.getByLabel('协同计数',{exact:true}).innerText()===counter,method+' creates no collaboration transaction')
+  }
+  await select();await a.pressKey(null,'F2');await a.typeText(null,'草稿')
+  await button(a,'插入').click();await a.playwright.getByRole('menuitem',{name:'超链接',exact:true}).click()
+  await a.playwright.getByRole('textbox',{name:'链接地址',exact:true}).fill('https://example.com/cancel')
+  await button(a,'取消').click()
+  assert((await a.playwright.getByLabel('原生文本草稿',{exact:true}).innerText()).endsWith('记录草稿'),'existing draft survives cancellation')
+  await a.typeText(null,'继续')
+  assert((await a.playwright.getByLabel('原生文本草稿',{exact:true}).innerText()).endsWith('记录草稿继续'),'typing continues in the native editor')
+  await a.pressKey(null,'Escape')
+  assert(JSON.stringify(await read(a))===before,'canceling the native draft preserves committed content')
+  assert(await a.playwright.getByLabel('协同计数',{exact:true}).innerText()===counter,'canceling drafts creates no collaboration transaction')
+  if(b)assert(JSON.stringify(await read(b))===before,'peer content stays unchanged')
+  return {methods:['cancel','close','escape','outside'],unchanged:true}
+}
+
 export async function verifyDefaultInsertions(a,b) {
   const button=(tab,name)=>tab.playwright.getByRole('button',{name,exact:true})
   const select=async(tab,value)=>{const input=tab.playwright.getByRole('textbox',{exact:true});await input.fill(value);await input.press('Enter')}

@@ -1469,8 +1469,9 @@ export const SpreadsheetEditor = forwardRef<
           }
           const operation = operationForNativeCommand(event.id)
           const capability = operation ? adapter.capabilities?.[operation] : undefined
+          const disabledLink = operation === 'inlineLink' && (readOnlyRef.current || capability?.enabled === false)
           const unsupportedCommand = capability ? !capability.supported : /(?:insert|remove|delete|move|copy).*(?:row|col|sheet)|merge|sort|filter|drawing|image|chart|table|conditional|validation|note|permission|protect/.test(event.id)
-          if ((capability && !capability.supported) || (event.type === 2 && /^(sheet|sheets|drawing|data-validation)\.mutation\./.test(event.id) && !adapter.supportsMutation(event.id)) || (event.type === 0 && unsupportedCommand)) {
+          if (disabledLink || (capability && !capability.supported) || (event.type === 2 && /^(sheet|sheets|drawing|data-validation)\.mutation\./.test(event.id) && !adapter.supportsMutation(event.id)) || (event.type === 0 && unsupportedCommand)) {
             event.cancel = true
             runtime.univerAPI.showMessage({ content: capability?.reason ?? tRef.current('session.unsupported'), type: 'warning', duration: 3000 })
           } else if (event.type === 2 && (event.id.startsWith('sheet.mutation.')||featureMutations[event.id])) {

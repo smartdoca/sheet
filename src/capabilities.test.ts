@@ -42,6 +42,14 @@ describe('capability gates', () => {
     expect(operationForNativeCommand('drawing.operation.set-drawing-selected')).toBeUndefined()
     expect(operationForNativeCommand('sheet.operation.clear-drawing-transformer')).toBeUndefined()
     expect(operationForNativeCommand('sheet.operation.close-image-crop')).toBeUndefined()
+    expect(operationForNativeCommand('sheet.operation.close-hyper-link-popup')).toBeUndefined()
+    expect(menu['sheet.operation.close-hyper-link-popup']).toBeUndefined()
+    expect(operationForNativeCommand('sheet.operation.open-hyper-link-edit-panel')).toBe('nativeHyperlink')
+    for(const id of ['sheets.command.cancel-hyper-link','sheets.command.cancel-rich-hyper-link']) {
+      expect(operationForNativeCommand(id)).toBe('inlineLink')
+      expect(menu[id]).toBeUndefined()
+    }
+    expect(operationForNativeCommand('sheets.mutation.remove-hyper-link')).toBe('nativeHyperlink')
     expect(createCapabilityMenuConfig()).toEqual({})
   })
   it('requires reviewing the catalog whenever pinned preset command IDs change', () => {
