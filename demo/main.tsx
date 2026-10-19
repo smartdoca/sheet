@@ -44,7 +44,9 @@ function App() {
 }
 
 const acceptanceRoom = new URLSearchParams(location.search).get('host-test')
-if (new URLSearchParams(location.search).has('acceptance')) {
+if (new URLSearchParams(location.search).has('filter-media-test')) {
+  void import('./filter-media-test').then(m=>m.mountFilterMediaTest())
+} else if (new URLSearchParams(location.search).has('acceptance')) {
   void import('../examples/acceptance-suite').then(m=>m.mountAcceptanceSuite(document.getElementById('root')!))
 } else if (new URLSearchParams(location.search).has('inline-test')) {
   void import('../examples/inline-acceptance').then(m=>m.createInlineAcceptance(new URLSearchParams(location.search).get('inline-test')!)).then(App=>ReactDOM.createRoot(document.getElementById('root')!).render(<App/>))

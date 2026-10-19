@@ -4,9 +4,13 @@ import {JSONX, type IDocumentData, type JSONXActions} from '@univerjs/core'
  * drawing records behind. Remove those records in the SAME mutation so the
  * engine's inverse restores both text and images. Never repair incoming data. */
 export function reconcileNativeInlineDeletion(document:IDocumentData, actions:JSONXActions):JSONXActions {
+  // Opening/closing an unchanged native draft can emit an empty replacement.
+  // It is not a deletion and has no projected document.
+  if(!actions)return actions
   const original=document.body?.customBlocks??[]
   if(!original.length||original.some(b=>(document.drawings?.[b.blockId] as {imageSourceType?:string}|undefined)?.imageSourceType!=='UUID'))return actions
   const projected=JSONX.apply(structuredClone(document),actions) as unknown as IDocumentData
+  if(!projected)return actions
   const remaining=new Set((projected.body?.customBlocks??[]).map(b=>b.blockId))
   const removed=original.map(b=>b.blockId).filter(id=>!remaining.has(id)&&projected.drawings?.[id])
   if(!removed.length)return actions

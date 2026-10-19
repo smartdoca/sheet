@@ -9,6 +9,7 @@ import { registerFeatureCommands } from './featureCommands'
 import {attachInlineMediaRender} from './inlineMediaRender'
 import {attachNativeClipboard} from './nativeClipboard'
 import {attachFormatPainter} from './nativeFormatPainter'
+import {attachNativeFilterRender} from './nativeFilterRender'
 
 /** Pure, sparse run query; never converts the draft back to a sheet cell. */
 export function queryTextStyles(body: IDocumentBody, start: number, end: number, defaults: ITextStyle = {}) {
@@ -43,12 +44,14 @@ export class TextFormattingPlugin extends Plugin {
   static override pluginName='uos.text-formatting'
   static override type=UniverInstanceType.UNIVER_SHEET
   private derivedLayout?:ReturnType<typeof attachDerivedAutoHeight>
+  private filterRender?:ReturnType<typeof attachNativeFilterRender>
   constructor(private readonly config:Config, protected readonly _injector:Injector){super()}
   override onReady() {
-    const media=attachInlineMediaRender(this._injector);this.config.bindImages?.(id=>media.refreshImages(id));this.disposeWithMe(media)
+    const media=attachInlineMediaRender(this._injector,this.config.container);this.config.bindImages?.(id=>media.refreshImages(id));this.disposeWithMe(media)
     this.derivedLayout=attachDerivedAutoHeight(this._injector)
     this.disposeWithMe(this.derivedLayout)
     this.disposeWithMe(registerFeatureCommands(this._injector))
+    this.filterRender=attachNativeFilterRender(this._injector);this.disposeWithMe(this.filterRender)
     const native=createNativeText(this._injector,this.config.container)
     this.disposeWithMe(attachNativeClipboard(this._injector,native.api))
     const painter=attachFormatPainter(this._injector);this.config.bindPainter?.(painter);this.disposeWithMe(painter)
@@ -86,6 +89,8 @@ export class TextFormattingPlugin extends Plugin {
     this.config.bind(query)
   }
   override onRendered(){
+    // The filter UI registers its render module at this lifecycle stage.
+    this.filterRender?.refresh()
     // Recovery intentionally excludes derived `ah`. Re-measure populated rows
     // after native validation renderers exist, without authored mutations.
     const units=this._injector.get(IUniverInstanceService)

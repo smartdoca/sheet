@@ -1,6 +1,6 @@
 {
   "name": "@smartdoca/sheet",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "description": "Embeddable React spreadsheet editor powered by Univer Sheets",
   "type": "module",
   "sideEffects": [
@@ -65,7 +65,9 @@
     "@univerjs/sheets-ui": "0.25.1",
     "@univerjs/docs": "0.25.1",
     "@univerjs/docs-ui": "0.25.1",
+    "@univerjs/drawing-ui": "0.25.1",
     "@univerjs/engine-render": "0.25.1",
+    "@univerjs/sheets-filter": "0.25.1",
     "@univerjs/ui": "0.25.1",
     "@univerjs/preset-sheets-conditional-formatting": "0.25.1",
     "@univerjs/preset-sheets-core": "0.25.1",
