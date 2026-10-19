@@ -1,12 +1,27 @@
-import {IImageIoService, ICommandService, HorizontalAlign, VerticalAlign, type Injector} from '@univerjs/core'
-import {IRenderManagerService, Documents} from '@univerjs/engine-render'
+import {IImageIoService, ICommandService, IUniverInstanceService, UniverInstanceType, type DocumentDataModel, type Injector, type Workbook} from '@univerjs/core'
+import {IRenderManagerService, Documents, Vector2} from '@univerjs/engine-render'
+import {getCoordByOffset,IEditorBridgeService,SheetSkeletonManagerService} from '@univerjs/sheets-ui'
+import {DrawingRenderService} from '@univerjs/drawing-ui'
+import {IGalleryService} from '@univerjs/ui'
+import {inlineImageBoxes} from './inlineImageGeometry'
 
 /** Pinned 0.25 adapter: use the native glyph position in BOTH the sheet and its
  * text editor. The upstream sheet Font image pass aligns every image to the cell
  * corner, which is correct for an image-only cell but not mixed inline content.
  * No document mutation, DOM overlay or global prototype modification. */
-export function attachInlineMediaRender(injector:Injector){
+export function attachInlineMediaRender(injector:Injector,container:HTMLElement){
   const renders=injector.get(IRenderManagerService),seen=new WeakSet<object>(),cleanup:Array<()=>void>=[]
+  const units=injector.get(IUniverInstanceService),bridge=injector.get(IEditorBridgeService)
+  // Docs also creates a second scene image at docTransform's cached position.
+  // Inline images are already painted at their glyphs below. Keep floating
+  // drawings native, and prevent the duplicate layer only for this instance.
+  const drawingRender=injector.get(DrawingRenderService),renderImages=drawingRender.renderImages
+  drawingRender.renderImages=function(param,...args){
+    const document=units.getUnit<DocumentDataModel>(param.unitId,UniverInstanceType.UNIVER_DOC)?.getSnapshot()
+    if(document?.drawings?.[param.drawingId]?.layoutType===0&&param.imageSourceType==='UUID'&&document.body?.customBlocks?.some(b=>b.blockId===param.drawingId))return Promise.resolve(undefined)
+    return renderImages.call(this,param,...args)
+  }
+  cleanup.push(()=>{drawingRender.renderImages=renderImages})
   type ImageEntry={bitmap?:ImageBitmap;element?:HTMLImageElement;pending:boolean;failed:boolean}
   const images=new Map<string,ImageEntry>()
   const disposeImage=(entry:ImageEntry)=>{entry.bitmap?.close();if(entry.element){entry.element.onload=null;entry.element.onerror=null;entry.element.src=''}}
@@ -43,13 +58,10 @@ export function attachInlineMediaRender(injector:Injector){
     // Inline drawing glyphs deliberately have empty content in 0.25, so native
     // span extensions skip them. The page callback exposes the same shaped boxes.
     const registration=document.pageRender$.subscribe(({page,pageLeft,pageTop,ctx})=>{
-      const config=page.renderConfig??{},h=config.horizontalAlign,v=config.verticalAlign
-      const dx=h===HorizontalAlign.CENTER?(document.width-page.width)/2:h===HorizontalAlign.RIGHT?document.width-page.width-page.marginRight:page.marginLeft
-      const dy=v===VerticalAlign.MIDDLE?(document.height-page.height)/2:v===VerticalAlign.TOP?page.marginTop:document.height-page.height-page.marginBottom
-      for(const skeleton of page.skeDrawings.values()){
-        const drawing=skeleton.drawingOrigin as any
-        if(drawing?.layoutType!==0||drawing.imageSourceType!=='UUID')continue
-        const {width,height}=drawing.docTransform.size,entry=image(drawing.source,dirty),x=pageLeft+dx+skeleton.columnLeft+skeleton.aLeft,y=pageTop+dy+skeleton.aTop
+      const snapshot=document.getSkeleton()?.getViewModel().getDataModel().getSnapshot()
+      if(!snapshot)return
+      for(const box of inlineImageBoxes(snapshot,page,document.width,document.height)){
+        const {drawing,width,height}=box,entry=image(drawing.source,dirty),x=pageLeft+box.left,y=pageTop+box.top
         ctx.save()
         if(entry.bitmap&&!entry.failed)ctx.drawImage(entry.bitmap,x,y,width,height)
         else {ctx.fillStyle='#f0f3f2';ctx.fillRect(x,y,width,height);ctx.strokeStyle=entry.failed?'#ba584d':'#a8b8b1';ctx.strokeRect(x+.5,y+.5,width-1,height-1);ctx.fillStyle='#53645d';ctx.font='10px sans-serif';ctx.fillText(entry.failed?'图片不可用':'加载图片',x+3,y+Math.min(14,height-2),Math.max(1,width-6))}
@@ -81,5 +93,38 @@ export function attachInlineMediaRender(injector:Injector){
   }
   const sub=renders.created$.subscribe(()=>queueMicrotask(scan));queueMicrotask(scan)
   const commands=injector.get(ICommandService).onCommandExecuted(c=>{if(c.id==='doc.mutation.rich-text-editing'||c.id==='sheet.mutation.set-range-values'||c.id==='sheet.operation.set-cell-edit-visible')scan()})
+  const hit=(event:MouseEvent)=>{
+    if(disposed||bridge.isVisible().visible)return null
+    const book=units.getCurrentUnitOfType<Workbook>(UniverInstanceType.UNIVER_SHEET),sheet=book?.getActiveSheet(),render=book&&renders.getRenderById(book.getUnitId())
+    if(!sheet||!render||event.target!==render.engine.getCanvasElement())return null
+    const skeleton=render.with(SheetSkeletonManagerService).getSkeletonParam(sheet.getSheetId())?.skeleton
+    if(!skeleton)return null
+    const rect=render.engine.getCanvasElement().getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top
+    const viewport=render.scene.getActiveViewportByCoord(new Vector2(x,y));if(!viewport)return null
+    const index=getCoordByOffset(x,y,render.scene,skeleton,viewport)
+    if(!sheet.getRowVisible(index.row)||!sheet.getColVisible(index.column))return null
+    const cell=skeleton.getCellWithCoordByIndex(index.row,index.column),font=skeleton.getFont(cell.actualRow,cell.actualColumn),document=font?.documentSkeleton
+    const snapshot=document?.getViewModel().getDataModel().getSnapshot(),page=document?.getSkeletonData()?.pages[0]
+    if(!snapshot||!page)return null
+    const {scaleX,scaleY}=render.scene.getAncestorScale(),bounds=cell.mergeInfo
+    const {leftOffset=0,rightOffset=0}=font?.cellData?.fontRenderExtension??{}
+    const width=bounds.endX-bounds.startX-leftOffset-rightOffset,height=bounds.endY-bounds.startY
+    const px=x/scaleX+viewport.viewportScrollX-bounds.startX-leftOffset-.5,py=y/scaleY+viewport.viewportScrollY-bounds.startY-.5
+    if(px<0||py<0||px>width||py>height)return null
+    return inlineImageBoxes(snapshot,page,width,height).find(b=>px>=b.left&&px<=b.left+b.width&&py>=b.top&&py<=b.top+b.height)?.drawing??null
+  }
+  let down:{x:number;y:number;id:string}|undefined,previewing=false,galleryOpen=false
+  const pointerDown=(event:PointerEvent)=>{const drawing=event.button===0&&!event.shiftKey&&!event.ctrlKey&&!event.metaKey&&!event.altKey?hit(event):null;down=drawing?{x:event.clientX,y:event.clientY,id:drawing.drawingId}:undefined}
+  const click=(event:MouseEvent)=>{
+    const start=down;down=undefined
+    if(!start||Math.hypot(event.clientX-start.x,event.clientY-start.y)>5)return
+    const drawing=hit(event);if(!drawing||drawing.drawingId!==start.id)return
+    event.preventDefault();event.stopImmediatePropagation()
+    if(previewing)return
+    previewing=true
+    void injector.get(IImageIoService).getImage(drawing.source).then(url=>{if(!disposed){const gallery=injector.get(IGalleryService);galleryOpen=true;gallery.open({images:[url],onOpenChange:open=>{if(!open){galleryOpen=false;gallery.close()}}})}}).catch(()=>{const entry=images.get(drawing.source);if(entry)entry.failed=true;refresh()}).finally(()=>{previewing=false})
+  }
+  container.addEventListener('pointerdown',pointerDown,true);container.addEventListener('click',click,true)
+  cleanup.push(()=>{if(galleryOpen)injector.get(IGalleryService).close();container.removeEventListener('pointerdown',pointerDown,true);container.removeEventListener('click',click,true)})
   return {refreshImages(assetId?:string){for(const [id,entry] of images)if(!assetId||id===assetId){disposeImage(entry);images.delete(id)}refresh()},dispose(){disposed=true;sub.unsubscribe();commands.dispose();cleanup.forEach(fn=>fn());images.forEach(disposeImage);images.clear()}}
 }

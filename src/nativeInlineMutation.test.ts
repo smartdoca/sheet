@@ -1,5 +1,5 @@
 import {expect,it} from 'vitest'
-import {JSONX,TextX,TextXActionType,type IDocumentData} from '@univerjs/core'
+import {JSONX,TextX,TextXActionType,type IDocumentData,type JSONXActions} from '@univerjs/core'
 import {inlineFragment,validateInlineDocument} from './inlineMedia'
 import {reconcileNativeInlineDeletion} from './nativeInlineMutation'
 
@@ -16,6 +16,12 @@ function fixture(){
   doc.body!.customDecorations=[]
   return doc
 }
+it('leaves a null native image draft replacement as a no-op',()=>{
+  const doc=fixture(),before=structuredClone(doc)
+  const actions=null
+  expect(reconcileNativeInlineDeletion(doc,actions as unknown as JSONXActions)).toBe(actions)
+  expect(doc).toEqual(before)
+})
 it.each([[2,1],[0,9]])('native delete at %i length %i removes drawing membership atomically and undo restores identities', (start,length)=>{
   const doc=fixture(),text=new TextX()
   if(start)text.push({t:TextXActionType.RETAIN,len:start})
