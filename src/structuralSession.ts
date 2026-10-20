@@ -46,13 +46,20 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
     if(row)await apply(ROW_AUTO,sheetId,{ranges,autoHeightInfo:auto})
     await apply(command,sheetId,{[field]:data})
   }
-  function projectFeatures(sheetId:string){return (async()=>{
+  function projectFeatures(sheetId:string,recalculateFilter=false){return (async()=>{
     const freeze=model.freeze(sheetId)
     if(!same(projected.sheets[sheetId].freeze,freeze)){await apply(SET_FROZEN,sheetId,freeze);projected.sheets[sheetId].freeze=freeze}
+    let hasFilter=false
     for(const feature of ['merge','filter','conditionalFormat','dataValidation'] as SheetFeature[]){
-      const key=featureKey(sheetId,feature),before=featureCache.get(key)??(baseline.snapshot.sheets[sheetId]?baselineFeature(baseline.snapshot,sheetId,feature):feature==='filter'?null:[]),after=model.feature(sheetId,feature)
+      // A cached null means the native filter was removed, even if the baseline has one.
+      const key=featureKey(sheetId,feature),before=featureCache.has(key)?featureCache.get(key):(baseline.snapshot.sheets[sheetId]?baselineFeature(baseline.snapshot,sheetId,feature):feature==='filter'?null:[]),after=model.feature(sheetId,feature)
       if(!same(before,after)){for(const m of featureProjection(feature,before,after,baseline.workbookId,sheetId))await context!.applyRemoteMutation(structuredClone(m));featureCache.set(key,structuredClone(after))}
+      if(feature==='filter')hasFilter=!!after
     }
+    // A sync can contain both cells and a newly created filter. Restore the
+    // native model before recalculating; unchanged criteria also need fresh
+    // results after cell recovery or record sorting.
+    if(recalculateFilter&&hasFilter)await apply('sheet.mutation.re-calc-filter',sheetId,{})
   })()}
   function projectCells(keys:Iterable<string>){
     const entries=[...keys].flatMap(key=>{
@@ -74,7 +81,7 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
         await apply(SET_CELLS,id,{cellValue})
         const matrix=projected.sheets[id].cellData??={}
         for(const [r,row] of Object.entries(cellValue))for(const [c,cell] of Object.entries(row))Object.assign((matrix[+r]??={})[+c]??={},structuredClone(cell))
-        if(model.feature(id,'filter'))await apply('sheet.mutation.re-calc-filter',id,{})
+        await projectFeatures(id,true)
       }
     })
   }
@@ -121,7 +128,7 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
         }
         if(Object.keys(clear).length)await apply(SET_CELLS,id,{cellValue:clear})
         if(Object.keys(values).length)await apply(SET_CELLS,id,{cellValue:values})
-        await projectFeatures(id)
+        await projectFeatures(id,Object.keys(clear).length>0)
       }
       projected=structuredClone(next)
     })
