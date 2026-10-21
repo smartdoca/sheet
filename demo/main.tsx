@@ -44,7 +44,9 @@ function App() {
 }
 
 const acceptanceRoom = new URLSearchParams(location.search).get('host-test')
-if (new URLSearchParams(location.search).has('filter-media-test')) {
+if (new URLSearchParams(location.search).has('lifecycle-test')) {
+  void import('./lifecycle-test').then(m=>m.mountLifecycleTest())
+} else if (new URLSearchParams(location.search).has('filter-media-test')) {
   void import('./filter-media-test').then(m=>m.mountFilterMediaTest())
 } else if (new URLSearchParams(location.search).has('acceptance')) {
   void import('../examples/acceptance-suite').then(m=>m.mountAcceptanceSuite(document.getElementById('root')!))
