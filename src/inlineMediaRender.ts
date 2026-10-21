@@ -1,15 +1,18 @@
 import {IImageIoService, ICommandService, IUniverInstanceService, UniverInstanceType, type DocumentDataModel, type Injector, type Workbook} from '@univerjs/core'
-import {IRenderManagerService, Documents, Vector2} from '@univerjs/engine-render'
+import {IRenderManagerService, Documents, Vector2,type IDocumentSkeletonPage} from '@univerjs/engine-render'
 import {getCoordByOffset,IEditorBridgeService,SheetSkeletonManagerService} from '@univerjs/sheets-ui'
 import {DrawingRenderService} from '@univerjs/drawing-ui'
 import {IGalleryService} from '@univerjs/ui'
 import {inlineImageBoxes} from './inlineImageGeometry'
+import {DocSelectionManagerService} from '@univerjs/docs'
+import {attachInlineImageInteraction,type InlineImageHit} from './inlineImageInteraction'
+import type {RuntimeFactoryContext} from './types'
 
 /** Pinned 0.25 adapter: use the native glyph position in BOTH the sheet and its
  * text editor. The upstream sheet Font image pass aligns every image to the cell
  * corner, which is correct for an image-only cell but not mixed inline content.
  * No document mutation, DOM overlay or global prototype modification. */
-export function attachInlineMediaRender(injector:Injector,container:HTMLElement){
+export function attachInlineMediaRender(injector:Injector,container:HTMLElement,options:{preview?:RuntimeFactoryContext['imagePreview'];labels():{loading:string;unavailable:string}}){
   const renders=injector.get(IRenderManagerService),seen=new WeakSet<object>(),cleanup:Array<()=>void>=[]
   const units=injector.get(IUniverInstanceService),bridge=injector.get(IEditorBridgeService)
   // Docs also creates a second scene image at docTransform's cached position.
@@ -26,6 +29,8 @@ export function attachInlineMediaRender(injector:Injector,container:HTMLElement)
   const images=new Map<string,ImageEntry>()
   const disposeImage=(entry:ImageEntry)=>{entry.bitmap?.close();if(entry.element){entry.element.onload=null;entry.element.onerror=null;entry.element.src=''}}
   let disposed=false
+  let interaction:ReturnType<typeof attachInlineImageInteraction>|undefined
+  const pages=new WeakMap<Documents,Map<IDocumentSkeletonPage,{left:number;top:number}>>()
   const refresh=()=>{if(!disposed)for(const render of renders.getRenderAll().values())render.mainComponent?.makeDirty()}
   const image=(id:string,dirty:()=>void)=>{
     let entry=images.get(id)
@@ -60,11 +65,15 @@ export function attachInlineMediaRender(injector:Injector,container:HTMLElement)
     const registration=document.pageRender$.subscribe(({page,pageLeft,pageTop,ctx})=>{
       const snapshot=document.getSkeleton()?.getViewModel().getDataModel().getSnapshot()
       if(!snapshot)return
+      let positions=pages.get(document);if(!positions){positions=new Map();pages.set(document,positions)}
+      for(const old of positions.keys())if(!document.getSkeleton()?.getSkeletonData()?.pages.includes(old))positions.delete(old)
+      positions.set(page,{left:pageLeft,top:pageTop})
       for(const box of inlineImageBoxes(snapshot,page,document.width,document.height)){
         const {drawing,width,height}=box,entry=image(drawing.source,dirty),x=pageLeft+box.left,y=pageTop+box.top
         ctx.save()
         if(entry.bitmap&&!entry.failed)ctx.drawImage(entry.bitmap,x,y,width,height)
-        else {ctx.fillStyle='#f0f3f2';ctx.fillRect(x,y,width,height);ctx.strokeStyle=entry.failed?'#ba584d':'#a8b8b1';ctx.strokeRect(x+.5,y+.5,width-1,height-1);ctx.fillStyle='#53645d';ctx.font='10px sans-serif';ctx.fillText(entry.failed?'图片不可用':'加载图片',x+3,y+Math.min(14,height-2),Math.max(1,width-6))}
+        else {ctx.fillStyle='#f0f3f2';ctx.fillRect(x,y,width,height);ctx.strokeStyle=entry.failed?'#ba584d':'#a8b8b1';ctx.strokeRect(x+.5,y+.5,width-1,height-1);ctx.fillStyle='#53645d';ctx.font='10px sans-serif';const labels=options.labels();ctx.fillText(entry.failed?labels.unavailable:labels.loading,x+3,y+Math.min(14,height-2),Math.max(1,width-6))}
+        if(interaction?.isSelected(drawing.drawingId)){ctx.strokeStyle='#4768eb';ctx.lineWidth=2;ctx.strokeRect(x+1,y+1,width-2,height-2)}
         ctx.restore()
       }
     });cleanup.push(()=>registration.unsubscribe())
@@ -92,9 +101,31 @@ export function attachInlineMediaRender(injector:Injector,container:HTMLElement)
     }
   }
   const sub=renders.created$.subscribe(()=>queueMicrotask(scan));queueMicrotask(scan)
-  const commands=injector.get(ICommandService).onCommandExecuted(c=>{if(c.id==='doc.mutation.rich-text-editing'||c.id==='sheet.mutation.set-range-values'||c.id==='sheet.operation.set-cell-edit-visible')scan()})
-  const hit=(event:MouseEvent)=>{
-    if(disposed||bridge.isVisible().visible)return null
+  const commands=injector.get(ICommandService).onCommandExecuted(c=>{
+    if(c.id==='doc.mutation.rich-text-editing'||c.id==='sheet.mutation.set-range-values'||c.id==='sheet.operation.set-cell-edit-visible'){interaction?.clear();scan()}
+    if(c.id==='sheet.operation.set-selections'||c.id==='sheet.operation.set-worksheet-active')interaction?.clear()
+  })
+  const hit=(event:MouseEvent):InlineImageHit|null=>{
+    if(disposed)return null
+    if(bridge.isVisible().visible){
+      const location=bridge.getEditLocation(),id=bridge.getCurrentEditorId(),render=renders.getRenderById(id),document=render?.mainComponent
+      if(!location||!(document instanceof Documents)||!render||event.target!==render.engine.getCanvasElement())return null
+      const skeleton=document.getSkeleton(),snapshot=skeleton?.getViewModel().getDataModel().getSnapshot()
+      if(!snapshot)return null
+      const rect=render.engine.getCanvasElement().getBoundingClientRect(),x=event.clientX-rect.left,y=event.clientY-rect.top
+      const viewport=render.scene.getActiveViewportByCoord(new Vector2(x,y));if(!viewport)return null
+      const point=document.getOffsetConfig().documentTransform.clone().invert().applyPoint(viewport.transformVector2SceneCoord(new Vector2(x,y)))
+      for(const page of skeleton?.getSkeletonData()?.pages??[]){
+        const offset=pages.get(document)?.get(page);if(!offset)continue
+        const box=inlineImageBoxes(snapshot,page,document.width,document.height).find(b=>point.x>=offset.left+b.left&&point.x<=offset.left+b.left+b.width&&point.y>=offset.top+b.top&&point.y<=offset.top+b.top+b.height)
+        if(!box)continue
+        const drawing=box.drawing,block=snapshot.body?.customBlocks?.find(b=>b.blockId===drawing.drawingId)
+        if(!block)return null
+        const cell={workbookId:location.unitId,sheetId:location.sheetId,row:location.row,column:location.column}
+        return {key:JSON.stringify([cell,drawing.drawingId,drawing.source]),drawingId:drawing.drawingId,resource:{id:drawing.source,kind:'image',name:drawing.title??drawing.source},cell,draft:{unitId:id,startOffset:block.startIndex,endOffset:block.startIndex+1}}
+      }
+      return null
+    }
     const book=units.getCurrentUnitOfType<Workbook>(UniverInstanceType.UNIVER_SHEET),sheet=book?.getActiveSheet(),render=book&&renders.getRenderById(book.getUnitId())
     if(!sheet||!render||event.target!==render.engine.getCanvasElement())return null
     const skeleton=render.with(SheetSkeletonManagerService).getSkeletonParam(sheet.getSheetId())?.skeleton
@@ -111,20 +142,26 @@ export function attachInlineMediaRender(injector:Injector,container:HTMLElement)
     const width=bounds.endX-bounds.startX-leftOffset-rightOffset,height=bounds.endY-bounds.startY
     const px=x/scaleX+viewport.viewportScrollX-bounds.startX-leftOffset-.5,py=y/scaleY+viewport.viewportScrollY-bounds.startY-.5
     if(px<0||py<0||px>width||py>height)return null
-    return inlineImageBoxes(snapshot,page,width,height).find(b=>px>=b.left&&px<=b.left+b.width&&py>=b.top&&py<=b.top+b.height)?.drawing??null
+    const drawing=inlineImageBoxes(snapshot,page,width,height).find(b=>px>=b.left&&px<=b.left+b.width&&py>=b.top&&py<=b.top+b.height)?.drawing
+    if(!drawing)return null
+    const location={workbookId:book!.getUnitId(),sheetId:sheet.getSheetId(),row:cell.actualRow,column:cell.actualColumn}
+    return {key:JSON.stringify([location,drawing.drawingId,drawing.source]),drawingId:drawing.drawingId,resource:{id:drawing.source,kind:'image',name:drawing.title??drawing.source},cell:location}
   }
-  let down:{x:number;y:number;id:string}|undefined,previewing=false,galleryOpen=false
-  const pointerDown=(event:PointerEvent)=>{const drawing=event.button===0&&!event.shiftKey&&!event.ctrlKey&&!event.metaKey&&!event.altKey?hit(event):null;down=drawing?{x:event.clientX,y:event.clientY,id:drawing.drawingId}:undefined}
-  const click=(event:MouseEvent)=>{
-    const start=down;down=undefined
-    if(!start||Math.hypot(event.clientX-start.x,event.clientY-start.y)>5)return
-    const drawing=hit(event);if(!drawing||drawing.drawingId!==start.id)return
-    event.preventDefault();event.stopImmediatePropagation()
-    if(previewing)return
-    previewing=true
-    void injector.get(IImageIoService).getImage(drawing.source).then(url=>{if(!disposed){const gallery=injector.get(IGalleryService);galleryOpen=true;gallery.open({images:[url],onOpenChange:open=>{if(!open){galleryOpen=false;gallery.close()}}})}}).catch(()=>{const entry=images.get(drawing.source);if(entry)entry.failed=true;refresh()}).finally(()=>{previewing=false})
-  }
-  container.addEventListener('pointerdown',pointerDown,true);container.addEventListener('click',click,true)
-  cleanup.push(()=>{if(galleryOpen)injector.get(IGalleryService).close();container.removeEventListener('pointerdown',pointerDown,true);container.removeEventListener('click',click,true)})
-  return {refreshImages(assetId?:string){for(const [id,entry] of images)if(!assetId||id===assetId){disposeImage(entry);images.delete(id)}refresh()},dispose(){disposed=true;sub.unsubscribe();commands.dispose();cleanup.forEach(fn=>fn());images.forEach(disposeImage);images.clear()}}
+  let galleryOpen=false
+  interaction=attachInlineImageInteraction(container.ownerDocument,{
+    hit,readOnly:()=>options.preview?.readOnly()??false,refresh,
+    select:hit=>{if(hit.draft)injector.get(DocSelectionManagerService).replaceDocRanges([{startOffset:hit.draft.startOffset,endOffset:hit.draft.endOffset}],{unitId:hit.draft.unitId,subUnitId:hit.draft.unitId},false)},
+    preview:async event=>{
+      if(options.preview){const result=options.preview.open(event);if(result!==false){await result;return}}
+      try{
+        const url=await injector.get(IImageIoService).getImage(event.resource.id)
+        if(disposed)return
+        const gallery=injector.get(IGalleryService);galleryOpen=true
+        gallery.open({images:[url],onOpenChange:open=>{if(!open){galleryOpen=false;gallery.close()}}})
+      }catch(error){const entry=images.get(event.resource.id);if(entry)entry.failed=true;refresh();throw error}
+    },
+    onError:error=>options.preview?.onError(error),
+  })
+  cleanup.push(()=>{if(galleryOpen)injector.get(IGalleryService).close()})
+  return {refreshImages(assetId?:string){for(const [id,entry] of images)if(!assetId||id===assetId){disposeImage(entry);images.delete(id)}refresh()},dispose(){disposed=true;interaction?.dispose();sub.unsubscribe();commands.dispose();cleanup.forEach(fn=>fn());images.forEach(disposeImage);images.clear()}}
 }

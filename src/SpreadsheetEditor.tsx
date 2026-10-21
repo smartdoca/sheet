@@ -25,7 +25,7 @@ import { createDefaultSpreadsheetRuntime } from './runtime'
 import { createTranslator, intlLocale, resolveLocale } from './i18n'
 import { downloadResourceResult } from './resources'
 import { subscribeAttachmentPreview } from './attachmentPreview'
-import type { SpreadsheetAttachmentPreviewHandler } from './inlineTypes'
+import type { SpreadsheetAttachmentPreviewHandler,SpreadsheetImagePreviewHandler } from './inlineTypes'
 import {isFormulaProjection} from './transactionOrigin'
 import { sanitizeWorkbookSnapshot } from './snapshot'
 import { DEFAULT_WORKSHEET_DIMENSIONS } from './worksheetDefaults'
@@ -143,6 +143,8 @@ export interface SpreadsheetEditorProps {
   onImageDownload?: SpreadsheetImageDownloadHandler
   /** Inline attachment clicks, including readonly. The host owns access checks and preview UI. Errors reach onError. */
   onAttachmentPreview?: SpreadsheetAttachmentPreviewHandler
+  /** Native inline images: select first in edit mode, then preview; readonly previews immediately. */
+  onImagePreview?: SpreadsheetImagePreviewHandler
   onWorkbookNameChange?: (name: string) => void
   onReady?: (handle: SpreadsheetEditorHandle) => void
   onSelectionChange?: (selection: SpreadsheetCellSelection | null) => void
@@ -331,6 +333,7 @@ export const SpreadsheetEditor = forwardRef<
     onImageUpload,
     onImageDownload,
     onAttachmentPreview,
+    onImagePreview,
     onWorkbookNameChange,
     onReady,
     onSelectionChange,
@@ -391,6 +394,7 @@ export const SpreadsheetEditor = forwardRef<
   const onImageUploadRef = useRef(onImageUpload)
   const onImageDownloadRef = useRef(onImageDownload)
   const onAttachmentPreviewRef = useRef(onAttachmentPreview)
+  const onImagePreviewRef = useRef(onImagePreview)
   const onErrorRef = useRef(onError)
   const resolvedCommentMarkersRef = useRef(new Map<string, Array<{ marker: SpreadsheetCommentMarker; range: SpreadsheetCellRange }>>())
   cellRenderersRef.current = cellRenderers
@@ -409,6 +413,7 @@ export const SpreadsheetEditor = forwardRef<
   onImageUploadRef.current = onImageUpload
   onImageDownloadRef.current = onImageDownload
   onAttachmentPreviewRef.current = onAttachmentPreview
+  onImagePreviewRef.current = onImagePreview
   onErrorRef.current = onError
   const requireOperation = useCallback((operation: ExlsxOperation) => {
     const capability = collaborationRef.current?.capabilities?.[operation]
@@ -994,6 +999,12 @@ export const SpreadsheetEditor = forwardRef<
 
   const nativeAnchorsRef=useRef(new Map<string,SpreadsheetCommentAnchor>())
   const handleRef = useRef<SpreadsheetEditorHandle>({
+    getImageGallery:()=>{
+      const runtime=runtimeRef.current
+      if(!runtime)throw new Error('Spreadsheet is not ready')
+      if(!runtime.getImageGallery)throw new Error('IMAGE_GALLERY_UNSUPPORTED')
+      return runtime.getImageGallery(collaborationRef.current?.getFloatingObjects?.()??[])
+    },
     refreshInlineImages:assetId=>runtimeRef.current?.refreshInlineImages?.(assetId),
     insertFloatingImage:async (file):Promise<string>=>{
       requireOperation('image');if(!effectiveResourceAdapter)throw new Error('RESOURCE_ADAPTER_REQUIRED')
@@ -1135,6 +1146,7 @@ export const SpreadsheetEditor = forwardRef<
     downloadResource,
   })
   handleRef.current = {
+    getImageGallery:handleRef.current.getImageGallery,
     insertFloatingImage:handleRef.current.insertFloatingImage,
     getFloatingObjects:handleRef.current.getFloatingObjects,
     refreshInlineImages:handleRef.current.refreshInlineImages,
@@ -1255,6 +1267,11 @@ export const SpreadsheetEditor = forwardRef<
           locale,
           languagePack,
           resourceAdapter: effectiveResourceAdapter,
+          imagePreview:{
+            readOnly:()=>readOnlyRef.current,
+            open:event=>{const handler=onImagePreviewRef.current;return handler?handler(event):false},
+            onError:error=>{if(mountedRef.current)onErrorRef.current?.(error)},
+          },
           toolbarLayout,
           initialRows: Math.max(1, Math.min(MAX_SHEET_ROWS, initialRows)),
           initialColumns: Math.max(1, Math.min(MAX_SHEET_COLUMNS, initialColumns)),

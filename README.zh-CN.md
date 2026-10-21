@@ -35,6 +35,7 @@ export function Sheet({ id }: { id: string }) {
 | `persistence` | `WorkbookPersistenceAdapter` | 可选的本地持久化。宿主已经负责保存时不要再开一条自动保存。 |
 | `resourceAdapter` | `ResourceAdapter` | 宿主的文件和图片存储。 |
 | `onAttachmentPreview` | `SpreadsheetAttachmentPreviewHandler` | 点击单元格内附件标签时触发，只读模式也可用；由宿主打开预览。 |
+| `onImagePreview` | `SpreadsheetImagePreviewHandler` | 原生内联图片预览，由宿主校验访问权限并打开图片查看器。 |
 | `remoteSelections` | `SpreadsheetRemoteSelection[]` | 临时选区。身份和颜色来自宿主会话。 |
 | `currentSessionId` | `string` | 当前标签的会话。同一用户的其他标签仍然可见。 |
 | `commentMarkers` | `SpreadsheetCommentMarker[]` | 宿主拥有的评论，锚在稳定位置上。 |
@@ -73,6 +74,12 @@ export function Sheet({ id }: { id: string }) {
 
 `SpreadsheetAttachmentPreviewEvent` 包含 `phase: 'click'`、`node: { type: 'attachment', refId, label }` 和 `cell: { workbookId, sheetId, row, column }`（行列从 0 开始）。仅点击原生内联附件标签时触发，悬停和单元格内其他位置不触发。只读模式也能预览，不修改内容；替换或移除回调不重建编辑器。同步异常和 Promise 拒绝交给最新的 `onError`，编辑器释放后忽略未完成预览的异常。未传回调时不执行预览。附件元信息、权限、预览地址和界面均由 Doca 实现。
 
+## 图片预览
+
+编辑模式先点击选中图片，再点击预览，原生单元格草稿中的图片也可操作；只读模式首次点击即可预览。`onImagePreview({drawingId, resource, cell})` 接收现有原生图片 ID、`resource: {id, kind: 'image', name}` 和从 0 开始的工作簿、工作表、单元格位置。宿主解析稳定资源 ID 并打开自己的查看器，不向文档写入临时地址。未传回调时使用原生图库。替换回调或切换只读不重建工作簿；异常交给 `onError`，释放后忽略尚未完成的预览异常。选中和预览不会提交草稿。
+
+`handle.getImageGallery()` 返回当前工作簿跨工作表的 `{drawingId, resource, placement, sheetId, cell}` 图片列表，包含 UUID 资源形式的内联图片、浮动图片和尚未提交的原生草稿。返回值与文档数据分离，按工作表顺序、行、列、同格内联文本位置、浮动顺序排列；没有单元格锚点的原生浮图排在本工作表最后，`cell` 为 `null`。宿主通过 `drawingId` 和工作表、单元格位置定位当前图片；同一资源的多次引用保留为多个条目。查询不会写内容或解析 URL。BASE64 图片没有宿主资源 ID，因此不进入该列表。自定义 runtime 需要实现此能力，否则抛出 `IMAGE_GALLERY_UNSUPPORTED`。
+
 ## 协同
 
 内容走 `collaboration`。光标只走 `remoteSelections`。
@@ -81,6 +88,7 @@ export function Sheet({ id }: { id: string }) {
 - `readOnly` 不发布编辑，也不发布正在编辑的选区。
 - `currentSessionId` 隐藏本标签自己的光标，保留其他会话。
 - 评论标记使用稳定的行列身份，不要把评论存成 A1 文本。
+- 筛选范围和条件属于共享状态，会同步、撤销并随工作簿恢复。筛选结果在本地修改内容后也会自动重算，重算不产生内容事务。
 
 其他入口：
 

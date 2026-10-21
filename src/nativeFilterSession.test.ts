@@ -5,6 +5,7 @@ import {UniverSheetsPlugin} from '@univerjs/sheets'
 import {SheetsFilterService,UniverSheetsFilterPlugin} from '@univerjs/sheets-filter'
 import {createExlsxBaseline,createExlsxCollaborationSession,restoreExlsxDocument,type ExlsxLocalTransaction,type ExlsxRecoveryBundle} from './session'
 import type {CollaborationContext,CollaborationMutation,WorkbookSnapshot} from './types'
+import {attachNativeFilterRefresh} from './nativeFilterRefresh'
 
 const range={startRow:0,endRow:2,startColumn:0,endColumn:0}
 const snapshot={id:'filter-session',name:'Filter session',styles:{},sheetOrder:['s'],sheets:{s:{id:'s',name:'Data',rowCount:20,columnCount:10,
@@ -19,10 +20,11 @@ async function replica(bundle:ExlsxRecoveryBundle,sessionId:string,readOnly=fals
   univer.registerPlugin(UniverSheetsFilterPlugin)
   const workbook=univer.createUnit(UniverInstanceType.UNIVER_SHEET,structuredClone(bundle.baseline.snapshot)) as Workbook
   const commands=univer.__getInjector().get(ICommandService),filters=univer.__getInjector().get(SheetsFilterService)
+  const filterRefresh=attachNativeFilterRefresh(univer.__getInjector())
   const updates:ExlsxLocalTransaction[]=[],mutations:CollaborationMutation[]=[]
   const initialUpdate=Y.encodeStateAsUpdate(doc)
   session.onLocalTransaction(update=>updates.push(update))
-  const dispose=()=>{session.dispose();univer.dispose();doc.destroy()}
+  const dispose=()=>{filterRefresh.dispose();session.dispose();univer.dispose();doc.destroy()}
   try{
     await session.connect({
       workbookId:snapshot.id,initialSnapshot:bundle.baseline.snapshot,getSnapshot:()=>workbook.save(),
@@ -58,6 +60,9 @@ it('creates the native filter before recalculating a combined cell/filter sync, 
     a.command('sheet.mutation.set-filter-range',{range})
     a.command('sheet.mutation.set-filter-criteria',{col:0,criteria:{filters:{filters:['keep']}}})
     a.command('sheet.mutation.set-range-values',{cellValue:{1:{0:{v:'hide'}}}})
+    await Promise.resolve()
+    expect(a.filtered()).toEqual(new Set([1,2]))
+    expect(a.updates).toHaveLength(3)
     await a.syncTo(b)
     await a.syncTo(b)
     expect(b.session.state).toBe('ready')
@@ -69,6 +74,8 @@ it('creates the native filter before recalculating a combined cell/filter sync, 
 
     // Cell-only edits and their undo/redo must also refresh an existing filter.
     a.command('sheet.mutation.set-range-values',{cellValue:{2:{0:{v:'keep'}}}})
+    await Promise.resolve()
+    expect(a.filtered()).toEqual(new Set([1]))
     await a.syncTo(b)
     expect(b.filtered()).toEqual(new Set([1]))
     await a.session.undo();await a.syncTo(b)

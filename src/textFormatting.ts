@@ -1,7 +1,7 @@
 import { EDITOR_ACTIVATED, IContextService, ICommandService, IUniverInstanceService, Inject, Injector, Plugin, UniverInstanceType, type Workbook, type DocumentDataModel, type IDocumentBody, type IStyleData, type ITextStyle } from '@univerjs/core'
 import { DocSelectionManagerService } from '@univerjs/docs'
 import { IEditorBridgeService } from '@univerjs/sheets-ui'
-import type { SpreadsheetRuntime, SpreadsheetTextFormatState } from './types'
+import type { RuntimeFactoryContext,SpreadsheetRuntime, SpreadsheetTextFormatState } from './types'
 import { createNativeText } from './nativeText'
 import { IUndoRedoService } from '@univerjs/core'
 import { attachDerivedAutoHeight } from './nativeLayout'
@@ -10,6 +10,7 @@ import {attachInlineMediaRender} from './inlineMediaRender'
 import {attachNativeClipboard} from './nativeClipboard'
 import {attachFormatPainter} from './nativeFormatPainter'
 import {attachNativeFilterRender} from './nativeFilterRender'
+import {attachNativeFilterRefresh} from './nativeFilterRefresh'
 
 /** Pure, sparse run query; never converts the draft back to a sheet cell. */
 export function queryTextStyles(body: IDocumentBody, start: number, end: number, defaults: ITextStyle = {}) {
@@ -38,7 +39,7 @@ export function queryTextStyles(body: IDocumentBody, start: number, end: number,
   return {style:style as IStyleData,mixed:[...mixed]}
 }
 
-type Config = {bindPainter?(painter:NonNullable<SpreadsheetRuntime['formatPainter']>):void;bindImages?(refresh:(assetId?:string)=>void):void;bind(query: NonNullable<SpreadsheetRuntime['getTextFormatState']>):void;container:HTMLElement;bindNative(api:NonNullable<SpreadsheetRuntime['nativeText']>):void;bindHistory(query: NonNullable<SpreadsheetRuntime['getUndoRedoState']>):void}
+type Config = {imagePreview?:RuntimeFactoryContext['imagePreview'];imageLabels():{loading:string;unavailable:string};bindPainter?(painter:NonNullable<SpreadsheetRuntime['formatPainter']>):void;bindImages?(refresh:(assetId?:string)=>void):void;bind(query: NonNullable<SpreadsheetRuntime['getTextFormatState']>):void;container:HTMLElement;bindNative(api:NonNullable<SpreadsheetRuntime['nativeText']>):void;bindHistory(query: NonNullable<SpreadsheetRuntime['getUndoRedoState']>):void}
 /** Package-owned adapter for pinned native editor services, not a host event patch. */
 export class TextFormattingPlugin extends Plugin {
   static override pluginName='uos.text-formatting'
@@ -47,11 +48,12 @@ export class TextFormattingPlugin extends Plugin {
   private filterRender?:ReturnType<typeof attachNativeFilterRender>
   constructor(private readonly config:Config, protected readonly _injector:Injector){super()}
   override onReady() {
-    const media=attachInlineMediaRender(this._injector,this.config.container);this.config.bindImages?.(id=>media.refreshImages(id));this.disposeWithMe(media)
+    const media=attachInlineMediaRender(this._injector,this.config.container,{preview:this.config.imagePreview,labels:this.config.imageLabels});this.config.bindImages?.(id=>media.refreshImages(id));this.disposeWithMe(media)
     this.derivedLayout=attachDerivedAutoHeight(this._injector)
     this.disposeWithMe(this.derivedLayout)
     this.disposeWithMe(registerFeatureCommands(this._injector))
     this.filterRender=attachNativeFilterRender(this._injector);this.disposeWithMe(this.filterRender)
+    this.disposeWithMe(attachNativeFilterRefresh(this._injector))
     const native=createNativeText(this._injector,this.config.container)
     this.disposeWithMe(attachNativeClipboard(this._injector,native.api))
     const painter=attachFormatPainter(this._injector);this.config.bindPainter?.(painter);this.disposeWithMe(painter)
