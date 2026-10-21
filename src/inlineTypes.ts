@@ -59,3 +59,22 @@ export interface SpreadsheetAttachmentPreviewEvent extends SpreadsheetInlineNode
 
 /** The host resolves node.refId, checks access and opens its attachment preview. */
 export type SpreadsheetAttachmentPreviewHandler = (event: SpreadsheetAttachmentPreviewEvent) => void | Promise<void>
+
+/** Stable image identity and cell location; the host owns access checks and its viewer. */
+export interface SpreadsheetImagePreviewEvent {
+  /** Existing native drawing ID; use with the cell location to identify an occurrence. */
+  drawingId:string
+  resource: {id:string;kind:'image';name:string}
+  cell: SpreadsheetTextEditState['cell']
+}
+export type SpreadsheetImagePreviewHandler = (event:SpreadsheetImagePreviewEvent)=>void|Promise<void>
+
+/** Detached, URL-free metadata for an image occurrence in the current workbook. */
+export interface SpreadsheetImageGalleryItem {
+  drawingId:string
+  resource:SpreadsheetImagePreviewEvent['resource']
+  placement:'inline'|'floating'
+  sheetId:string
+  /** null when a native floating image has no cell anchor. */
+  cell:import('./types').SpreadsheetCellRange|null
+}

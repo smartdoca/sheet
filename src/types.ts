@@ -110,6 +110,7 @@ export interface SpreadsheetRuntime {
   whenRendered?(signal: AbortSignal): Promise<void>
   getUndoRedoState?(): {canUndo:boolean;canRedo:boolean}
   refreshInlineImages?(assetId?:string):void
+  getImageGallery?(floating:readonly import('./floatingModel').FloatingObjectView[]):import('./inlineTypes').SpreadsheetImageGalleryItem[]
   formatPainter?:SpreadsheetFormatPainter
   /** Switches Univer UI copy without recreating the workbook or plugins. */
   applyLocale?(locale: string, languagePack?: SpreadsheetLanguagePack): void
@@ -301,6 +302,12 @@ export interface RuntimeFactoryContext {
   locale: SpreadsheetLocale
   languagePack?: SpreadsheetLanguagePack
   resourceAdapter?: ResourceAdapter
+  /** View-only image interaction supplied by SpreadsheetEditor to its runtime. */
+  imagePreview?: {
+    readOnly():boolean
+    open(event:import('./inlineTypes').SpreadsheetImagePreviewEvent):void|Promise<void>|false
+    onError(error:Error):void
+  }
   toolbarLayout: SpreadsheetToolbarLayout
   /** Stable protocol capabilities; no host-specific native command/DOM filtering. */
   capabilities?: ExlsxCapabilities
@@ -513,6 +520,9 @@ export interface ResourceAdapter {
 }
 
 export interface SpreadsheetEditorHandle {
+  /** Current UUID-backed images across sheets, including the active draft. No writes or URL resolution.
+   * Sheet order, row, column, inline text order, then floating order. Unsupported custom runtimes throw. */
+  getImageGallery():import('./inlineTypes').SpreadsheetImageGalleryItem[]
   getFloatingObjects():import('./floatingModel').FloatingObjectView[]
   putFloatingObject(input:import('./floatingModel').FloatingObjectInput):Promise<string>
   updateFloatingGeometry(id:string,patch:Partial<Pick<import('./floatingModel').FloatingGeometry,'offsetX'|'offsetY'|'width'|'height'>>):Promise<void>
