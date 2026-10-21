@@ -350,6 +350,7 @@ export const SpreadsheetEditor = forwardRef<
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cellImageInputRef = useRef<HTMLInputElement>(null)
   const runtimeRef = useRef<SpreadsheetRuntime | null>(null)
+  const runtimeDisposalRef = useRef<Promise<void>>(Promise.resolve())
   const refreshPackageMenusRef = useRef<() => void>(() => {})
   const importedSnapshotRef = useRef<WorkbookSnapshot | null>(null)
   const pendingImportRef = useRef(false)
@@ -1225,6 +1226,7 @@ export const SpreadsheetEditor = forwardRef<
   useEffect(() => {
     mountedRef.current = true
     const abortController = new AbortController()
+    let effectRuntime: SpreadsheetRuntime | undefined
     let disposeCommandListener: (() => void) | undefined
     let disposeCollaboration: (() => void) | undefined
     let disposeChartComponent: (() => void) | undefined
@@ -1258,6 +1260,9 @@ export const SpreadsheetEditor = forwardRef<
           : persistence
           ? await persistence.load(workbookId, abortController.signal)
           : null
+        // A previous native UI owns a separate React root in this container.
+        // Let its deferred teardown finish before creating another root here.
+        await runtimeDisposalRef.current
         if (abortController.signal.aborted || !containerRef.current) return
 
         revisionRef.current = loaded?.revision
@@ -1277,6 +1282,7 @@ export const SpreadsheetEditor = forwardRef<
           initialColumns: Math.max(1, Math.min(MAX_SHEET_COLUMNS, initialColumns)),
           capabilities: collaborationRef.current?.capabilities,
         })
+        effectRuntime = runtime
         runtimeRef.current = runtime
         const chartRegistration = runtime.univerAPI.registerComponent(
           ANALYSIS_CHART_COMPONENT,
@@ -1654,7 +1660,7 @@ export const SpreadsheetEditor = forwardRef<
         onReady?.(handleRef.current)
       } catch (error) {
         const normalized = toError(error)
-        if (!mountedRef.current) return
+        if (abortController.signal.aborted || !mountedRef.current) return
         setLoadError(normalized)
         setLoading(false)
         onError?.(normalized)
@@ -1688,8 +1694,16 @@ export const SpreadsheetEditor = forwardRef<
       disposeCellRenderers?.()
       customComponentDisposers.forEach((dispose) => dispose())
       refreshPackageMenusRef.current = () => {}
-      runtimeRef.current?.univer.dispose()
-      runtimeRef.current = null
+      if (runtimeRef.current === effectRuntime) runtimeRef.current = null
+      if (effectRuntime) {
+        const runtime = effectRuntime
+        // Univer synchronously unmounts its own React root. Run that outside
+        // this parent's commit, while keeping the container unavailable until
+        // disposal completes (including rapid remounts and StrictMode replay).
+        runtimeDisposalRef.current = Promise.resolve().then(() => runtime.univer.dispose()).catch(error => {
+          onErrorRef.current?.(toError(error))
+        })
+      }
       refreshHostMenusRef.current = () => undefined
       commentRegionsRef.current = []
     }
