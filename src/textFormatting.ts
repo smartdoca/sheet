@@ -11,6 +11,7 @@ import {attachNativeClipboard} from './nativeClipboard'
 import {attachFormatPainter} from './nativeFormatPainter'
 import {attachNativeFilterRender} from './nativeFilterRender'
 import {attachNativeFilterRefresh} from './nativeFilterRefresh'
+import {attachNativeDropdownDelete} from './nativeDropdownDelete'
 
 /** Pure, sparse run query; never converts the draft back to a sheet cell. */
 export function queryTextStyles(body: IDocumentBody, start: number, end: number, defaults: ITextStyle = {}) {
@@ -54,6 +55,7 @@ export class TextFormattingPlugin extends Plugin {
     this.disposeWithMe(registerFeatureCommands(this._injector))
     this.filterRender=attachNativeFilterRender(this._injector);this.disposeWithMe(this.filterRender)
     this.disposeWithMe(attachNativeFilterRefresh(this._injector))
+    this.disposeWithMe(attachNativeDropdownDelete(this._injector))
     const native=createNativeText(this._injector,this.config.container)
     this.disposeWithMe(attachNativeClipboard(this._injector,native.api))
     const painter=attachFormatPainter(this._injector);this.config.bindPainter?.(painter);this.disposeWithMe(painter)
