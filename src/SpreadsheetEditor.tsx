@@ -1494,9 +1494,16 @@ export const SpreadsheetEditor = forwardRef<
           const capability = operation ? adapter.capabilities?.[operation] : undefined
           const disabledLink = operation === 'inlineLink' && (readOnlyRef.current || capability?.enabled === false)
           const unsupportedCommand = capability ? !capability.supported : /(?:insert|remove|delete|move|copy).*(?:row|col|sheet)|merge|sort|filter|drawing|image|chart|table|conditional|validation|note|permission|protect/.test(event.id)
-          if (disabledLink || (capability && !capability.supported) || (event.type === 2 && /^(sheet|sheets|drawing|data-validation)\.mutation\./.test(event.id) && !adapter.supportsMutation(event.id)) || (event.type === 0 && unsupportedCommand)) {
+          const unsupportedMutation = event.type === 2 && /^(sheet|sheets|drawing|data-validation)\.mutation\./.test(event.id) && !adapter.supportsMutation(event.id)
+          if (disabledLink || (capability && !capability.supported) || unsupportedMutation || (event.type === 0 && unsupportedCommand)) {
             event.cancel = true
-            runtime.univerAPI.showMessage({ content: capability?.reason ?? tRef.current('session.unsupported'), type: 'warning', duration: 3000 })
+            // A supported feature's reason describes its guarantees, not why a
+            // raw native mutation was rejected. Paste's implicit axis inserts
+            // must use the same stable-identity path as explicit row/col edits.
+            const content = unsupportedMutation && /^sheet\.mutation\.insert-(row|col)$/.test(event.id)
+              ? tRef.current('clipboard.expandFirst')
+              : capability && !capability.enabled ? capability.reason : tRef.current('session.unsupported')
+            runtime.univerAPI.showMessage({ content, type: 'warning', duration: 5000 })
           } else if (event.type === 2 && (event.id.startsWith('sheet.mutation.')||featureMutations[event.id])) {
             try { adapter.validateLocalMutation?.({ id: event.id, params: event.params }) }
             catch (error) { event.cancel = true; onError?.(toError(error)); runtime.univerAPI.showMessage({ content: toError(error).message, type: 'warning' }) }

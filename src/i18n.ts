@@ -175,6 +175,7 @@ const MESSAGES: ReadonlyArray<readonly [string, string, string]> = [
   ['sort.descAll', '降序（包含首行）', 'Descending (include first row)'],
   ['sort.hint', '按选区首列排序整行记录，所有列一起移动，评论跟随记录。最多 10,000 行 / 250,000 格；公式与合并重叠范围不能排序。', 'Sort whole records by the first column. Every column moves together and comments follow the record. Up to 10,000 rows / 250,000 cells. Formulas and overlapping merges cannot be sorted.'],
   ['session.unsupported', '当前协同会话暂不支持此操作', 'This collaboration session does not support that action'],
+  ['clipboard.expandFirst', '粘贴范围超出当前工作表，请先插入足够的行或列再粘贴', 'The paste extends beyond this sheet. Insert enough rows or columns first, then paste again.'],
   ['format.mixedFont', '混合字体', 'Mixed fonts'],
   ['format.defaultFont', '默认字体', 'Default font'],
   ['format.mixedNumber', '混合格式', 'Mixed formats'],

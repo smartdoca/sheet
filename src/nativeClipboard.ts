@@ -1,4 +1,4 @@
-import {Injector,IUniverInstanceService,UniverInstanceType,type Workbook} from '@univerjs/core'
+import {Injector,ICommandService,IUniverInstanceService,UniverInstanceType,type Workbook} from '@univerjs/core'
 import {ISheetClipboardService} from '@univerjs/sheets-ui'
 import {IClipboardInterfaceService,IMessageService} from '@univerjs/ui'
 import {IDocClipboardService} from '@univerjs/docs-ui'
@@ -69,7 +69,7 @@ export function attachNativeClipboard(injector:Injector,native:SpreadsheetNative
     catch(error){event.preventDefault();event.stopImmediatePropagation();injector.get(IMessageService).show({content:`无法粘贴富文本：${String(error)}`})}
   }
   document.addEventListener('paste',onNativePaste,true)
-  const generate=service.generateCopyContent,paste=service.paste,clipboardFallback=service.legacyPaste
+  const generate=service.generateCopyContent,paste=service.paste,clipboardFallback=service.legacyPaste,pasteByCopyId=service.pasteByCopyId
   let pending:InlineClipboardFragment|null=null,busy=false
   service.generateCopyContent=function(unitId,sheetId,range,options){
     let copyRange=range
@@ -111,14 +111,26 @@ export function attachNativeClipboard(injector:Injector,native:SpreadsheetNative
       return {undos:[],redos:[]}
     },
   })
-  async function run<T>(html:string|undefined,action:()=>Promise<T>):Promise<T>{
+  async function run(html:string|undefined,action:()=>Promise<boolean>,requestedCopyId?:string):Promise<boolean>{
     if(busy)throw new Error('CLIPBOARD_OPERATION_IN_PROGRESS')
     busy=true
+    const cache=service.copyContentCache(),copyId=requestedCopyId??html?.match(/data-copy-id="([^"\s]+)"/)?.[1]??cache.getLastCopyId()
+    const cut=copyId?cache.get(copyId):undefined
+    let succeeded=false,contentApplied=false
+    const listener=injector.get(ICommandService).onCommandExecuted(command=>{
+      if(command.id==='sheet.mutation.set-range-values'||command.id==='sheet.mutation.move-range')contentApplied=true
+    })
     try{
       const encoded=html?new DOMParser().parseFromString(html,'text/html').querySelector('[data-exlsx-inline]')?.getAttribute('data-exlsx-inline'):null
       pending=encoded?decodeInlineClipboard(encoded):null
-      return await action()
-    }finally{pending=null;busy=false}
+      succeeded=await action();return succeeded
+    }finally{
+      listener.dispose()
+      // Univer consumes its cut cache even when the first paste mutation is
+      // rejected. Keep it retryable only if no content mutation was applied.
+      if(!succeeded&&!contentApplied&&copyId&&cut?.copyType==='CUT'&&cut.matrix&&cache.get(copyId)?.matrix===null&&cache.getLastCopyId()===copyId)cache.set(copyId,cut)
+      pending=null;busy=false
+    }
   }
   service.paste=async function(item,type){
     const state=native.getState(),target=state&&!state.formula?native.capture():null
@@ -136,6 +148,7 @@ export function attachNativeClipboard(injector:Injector,native:SpreadsheetNative
     if(native.getState()&&!native.getState()!.formula){const fragment=parseDoc(undefined,html);if(fragment)return Promise.resolve(insertCaptured(fragment))}
     return run(html,()=>clipboardFallback.call(this,html,text,files))
   }
+  service.pasteByCopyId=function(copyId,type){return run(undefined,()=>pasteByCopyId.call(this,copyId,type),copyId)}
   const selectAll=attachNativeSelectAll(injector)
-  return {dispose(){document.removeEventListener('paste',onNativePaste,true);hook.dispose();selectAll.dispose();docs.copy=docCopy;docs.paste=docPaste;docs.legacyPaste=docClipboardFallback;service.generateCopyContent=generate;service.paste=paste;service.legacyPaste=clipboardFallback;pending=null}}
+  return {dispose(){document.removeEventListener('paste',onNativePaste,true);hook.dispose();selectAll.dispose();docs.copy=docCopy;docs.paste=docPaste;docs.legacyPaste=docClipboardFallback;service.generateCopyContent=generate;service.paste=paste;service.legacyPaste=clipboardFallback;service.pasteByCopyId=pasteByCopyId;pending=null}}
 }
