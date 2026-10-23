@@ -8,6 +8,10 @@ import '@online-office/univer-sheet/style.css'
 export async function mountAcceptanceSuite(element: HTMLElement) {
   const params=new URLSearchParams(location.search),scenario=params.get('case')??params.get('acceptance')??'index'
   const room=params.get('room')??'suite-isolated-0913'
+  if(scenario==='zoom') {
+    const {mountViewPreferencesAcceptance}=await import('./view-preferences-acceptance')
+    await mountViewPreferencesAcceptance(element);return
+  }
   if(scenario==='features'){
     const {mountFeaturesAcceptance}=await import('./features-acceptance')
     await mountFeaturesAcceptance(element);return

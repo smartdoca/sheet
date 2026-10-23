@@ -1,5 +1,6 @@
-/** Compact dimensions for newly created worksheets, in CSS pixels. */
+/** Approved defaults for new sheets and unsized CRDT-created/recovery sheets.
+ * Immutable baseline sheets retain their original fields, including omission. */
 export const DEFAULT_WORKSHEET_DIMENSIONS = {
-  defaultRowHeight: 19.8,
-  defaultColumnWidth: 79.2,
+  defaultRowHeight: 21.78,
+  defaultColumnWidth: 87.12,
 }
