@@ -110,6 +110,8 @@ Use `collaboration` for content. Use `remoteSelections` only for cursors.
 - Comment markers use stable row and column identities. Do not store comments as A1 text.
 - Filters are shared: ranges and criteria synchronize, undo and recover with the workbook. Filtered row results are derived locally, including after local cell edits; recalculation does not create a content transaction.
 
+The approved collaborative filter policy in 0.2.12 keeps a stored range unchanged on open. Confirming active criteria extends it downward through the last content row within its existing columns, including records separated by blank rows. Clearing criteria leaves the range unchanged. Appending content immediately below a filter extends it through the contiguous records in those columns; styles and content outside those columns do not extend it. Cell content and its range extension share one Yjs transaction and undo step. Remote projection and checkpoint restoration apply the authored range before recalculation and emit no local content update. Schema 6, original baselines, epochs and checkpoints retain their format and identities. Older packages can read the saved native range but do not repair later implicit extensions; preserve later edits when rolling back.
+
 Other entry points:
 
 | Import | Use |

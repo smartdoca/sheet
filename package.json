@@ -1,6 +1,6 @@
 {
   "name": "@smartdoca/sheet",
-  "version": "0.2.11",
+  "version": "0.2.12",
   "description": "Embeddable React spreadsheet editor powered by Univer Sheets",
   "type": "module",
   "sideEffects": [
@@ -23,6 +23,7 @@
     "tests/clipboard-browser.cua.js",
     "tests/dropdown-delete-browser.cua.js",
     "tests/view-preferences-browser.cua.js",
+    "tests/filter-range-browser.cua.js",
     "LICENSE"
   ],
   "main": "./dist/index.cjs",

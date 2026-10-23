@@ -12,6 +12,7 @@ import {SET_FROZEN,encodeFreeze} from './sharedFreeze'
 import {REORDER} from './sharedRowOrder'
 import {FLOAT_OBJECTS,FLOAT_DELETIONS,validateFloatingObject,type FloatingObject} from './floatingModel'
 import {SHEET_COLLECTIONS,SHEET_SEEDS,SHEET_POSITIONS,SHEET_DELETIONS,SHEET_NAMES} from './worksheetCollection'
+import {cellHasCopyContent} from './selectAllCopy'
 const SET_CELLS='sheet.mutation.set-range-values'
 const MOVE_CELLS='sheet.mutation.move-range'
 const contentFields=['v','f','p','t','si'] as const
@@ -49,17 +50,22 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
   function projectFeatures(sheetId:string,recalculateFilter=false){return (async()=>{
     const freeze=model.freeze(sheetId)
     if(!same(projected.sheets[sheetId].freeze,freeze)){await apply(SET_FROZEN,sheetId,freeze);projected.sheets[sheetId].freeze=freeze}
-    let hasFilter=false
+    let filter:any=null
     for(const feature of ['merge','filter','conditionalFormat','dataValidation'] as SheetFeature[]){
       // A cached null means the native filter was removed, even if the baseline has one.
       const key=featureKey(sheetId,feature),before=featureCache.has(key)?featureCache.get(key):(baseline.snapshot.sheets[sheetId]?baselineFeature(baseline.snapshot,sheetId,feature):feature==='filter'?null:[]),after=model.feature(sheetId,feature)
       if(!same(before,after)){for(const m of featureProjection(feature,before,after,baseline.workbookId,sheetId))await context!.applyRemoteMutation(structuredClone(m));featureCache.set(key,structuredClone(after))}
-      if(feature==='filter')hasFilter=!!after
+      if(feature==='filter')filter=after
     }
     // A sync can contain both cells and a newly created filter. Restore the
     // native model before recalculating; unchanged criteria also need fresh
     // results after cell recovery or record sorting.
-    if(recalculateFilter&&hasFilter)await apply('sheet.mutation.re-calc-filter',sheetId,{})
+    if(recalculateFilter&&filter){
+      // Native value projection can extend FilterModel directly, without a
+      // mutation. Always restore the authored range before deriving row flags.
+      await apply('sheet.mutation.set-filter-range',sheetId,{range:filter.ref})
+      await apply('sheet.mutation.re-calc-filter',sheetId,{})
+    }
   })()}
   function projectCells(keys:Iterable<string>){
     const entries=[...keys].flatMap(key=>{
@@ -178,6 +184,35 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
     notifySafely(listeners,event)
   }
   type Write={key:string;value:any;formula?:ReturnType<StructuralModel['bindFormula']>|null}
+  // Inspect sparse canonical content, including pending cell writes. Native
+  // FilterModel's implicit range extension is not part of the shared model.
+  function filterContentRows(sheetId:string,range:SpreadsheetCellRange,pending:Write[]=[]){
+    const candidates=new Set<string>(),overrides=new Map(pending.map(w=>[w.key,w.value]))
+    for(const [row,columns] of Object.entries(model.seed(sheetId).cellData??{}))for(const column of Object.keys(columns))candidates.add(identityCellKey(sheetId,`b:${row}`,`b:${column}`,'content'))
+    for(const key of model.cells.keys())if(identityCellAddress(key)[0]===sheetId&&identityCellAddress(key)[3]==='content')candidates.add(key)
+    for(const key of overrides.keys())if(identityCellAddress(key)[0]===sheetId&&identityCellAddress(key)[3]==='content')candidates.add(key)
+    const axes=model.getAxes(sheetId),rows=new Set<number>()
+    for(const key of candidates){
+      const [,r,c]=identityCellAddress(key),row=axes.rows.indexOf(r),column=axes.columns.indexOf(c)
+      if(row<=range.endRow||column<range.startColumn||column>range.endColumn)continue
+      if(cellHasCopyContent(overrides.has(key)?overrides.get(key):model.value(key)))rows.add(row)
+    }
+    return rows
+  }
+  function appendFilterWrite(mutation:CollaborationMutation,writes:Write[]){
+    if(mutation.id!==SET_CELLS)return null
+    const sheetId=String(mutation.params?.subUnitId??''),filter=model.feature(sheetId,'filter')
+    if(!filter)return null
+    const axes=model.getAxes(sheetId),nextRow=filter.ref.endRow+1
+    if(!writes.some(w=>{const [,r,c,field]=identityCellAddress(w.key),column=axes.columns.indexOf(c);return field==='content'&&axes.rows.indexOf(r)===nextRow&&column>=filter.ref.startColumn&&column<=filter.ref.endColumn&&cellHasCopyContent(w.value)}))return null
+    const rows=filterContentRows(sheetId,filter.ref,writes)
+    while(rows.has(filter.ref.endRow+1))filter.ref.endRow++
+    // Match the existing stable-range validator before touching shared state.
+    if(filter.ref.endRow-filter.ref.startRow>=10000)throw new Error('INVALID_IDENTITY_RANGE')
+    const value=model.encodeFeature(sheetId,filter)
+    validateFeature('filter',encodeFeature(filter),model.dimensions(sheetId))
+    return {sheetId,key:featureKey(sheetId,'filter'),value}
+  }
   function prepare(mutation:CollaborationMutation):Write[]{
     writable()
     if(isSizeMutation(mutation.id)){
@@ -221,7 +256,12 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
       return [{key:sheetId,value:{start:range.startRow,ids:ids.map(id=>axis.idAt(order[id])!)}}]
     }
     if(featureMutations[mutation.id]){
-      const f=featureMutations[mutation.id],next=reduceFeature(f,model.feature(sheetId,f),mutation),encoded=model.encodeFeature(sheetId,next)
+      const f=featureMutations[mutation.id],next=reduceFeature(f,model.feature(sheetId,f),mutation)
+      // An explicit confirmation repairs a stale range; opening/replay does
+      // not expand stored rules. Preserve its header, columns and all criteria.
+      if(mutation.id==='sheet.mutation.set-filter-criteria'&&mutation.params?.criteria!=null)for(const row of filterContentRows(sheetId,next.ref))next.ref.endRow=Math.max(next.ref.endRow,row)
+      if(f==='filter'&&next&&next.ref.endRow-next.ref.startRow>=10000)throw new Error('INVALID_IDENTITY_RANGE')
+      const encoded=model.encodeFeature(sheetId,next)
       validateFeature(f,encodeFeature(next),model.dimensions(sheetId))
       return same(model.feature(sheetId,f),next)?[]:[{key:featureKey(sheetId,f),value:encoded}]
     }
@@ -252,7 +292,12 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
     return writes
   }
   const local=(mutation:CollaborationMutation)=>{
+    const confirmation=mutation.id==='sheet.mutation.set-filter-criteria'?{sheetId:String(mutation.params?.subUnitId),endRow:model.feature(String(mutation.params?.subUnitId),'filter')?.ref.endRow}:null
+    const cellSheet=mutation.id===SET_CELLS?String(mutation.params?.subUnitId):null,cellFilter=cellSheet?model.feature(cellSheet,'filter'):null
+    const appendRow=cellFilter?(mutation.params?.cellValue as Record<number,Record<number,Cell>>)?.[cellFilter.ref.endRow+1]:undefined
+    const restoreRange=appendRow&&Object.keys(appendRow).some(c=>+c>=cellFilter.ref.startColumn&&+c<=cellFilter.ref.endColumn)?cellSheet:null
     const writes=prepare(mutation),feature=featureMutations[mutation.id]
+    const appended=appendFilterWrite(mutation,writes)
     if(isSizeMutation(mutation.id)){
       doc.transact(()=>{for(const w of writes)doc.getMap(AXIS_SIZES).set(w.key,w.value)},origin)
       for(const w of writes){const p=model.projectSize(w.key);if(p){const field=p.axis==='row'?'rowData':'columnData';Object.assign((projected.sheets[p.sheetId][field]??={})[p.index]??={},p.value)}}
@@ -260,9 +305,12 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
     }
     if(mutation.id===REORDER){doc.transact(()=>{for(const w of writes)model.getAxes(w.key).rows.reorder(w.value.ids,w.value.start)},origin);return}
     if(mutation.id===SET_FROZEN){doc.transact(()=>{for(const w of writes)doc.getMap(STRUCTURAL_SETTINGS).set(w.key,w.value)},origin);projected.sheets[String(mutation.params?.subUnitId)].freeze=model.freeze(String(mutation.params?.subUnitId));return}
-    doc.transact(()=>{for(const w of writes){if(feature)model.features.set(w.key,w.value);else model.cells.set(w.key,w.value)}},origin)
+    doc.transact(()=>{for(const w of writes){if(feature)model.features.set(w.key,w.value);else model.cells.set(w.key,w.value)}if(appended)model.features.set(appended.key,appended.value)},origin)
     if(feature){const [id,f]=featureAddress(writes[0]?.key??featureKey(String(mutation.params?.subUnitId),feature));featureCache.set(featureKey(id,f),model.feature(id,f))}
     else for(const w of writes){const p=model.projectCell(w.key);if(p)Object.assign(((projected.sheets[p.sheetId].cellData??={})[p.row]??={})[p.column]??={},structuredClone(p.cell));if(editing)deferred.add(w.key)}
+    if(appended)featureCache.set(appended.key,model.feature(appended.sheetId,'filter'))
+    const confirmedSheet=confirmation&&model.feature(confirmation.sheetId,'filter')?.ref.endRow>confirmation.endRow?confirmation.sheetId:null
+    if(appended||confirmedSheet||restoreRange)enqueue(()=>projectFeatures(appended?.sheetId??confirmedSheet??restoreRange!,true))
   }
   let validator:Y.Doc|undefined,validatorModel:StructuralModel|undefined
   const discard=()=>{validatorModel?.dispose();validator?.destroy();validator=undefined;validatorModel=undefined}
@@ -295,7 +343,7 @@ export function createStructuralSession(options:ExlsxSessionOptions):ExlsxCollab
     get baseline(){return structuredClone(baseline)},get state(){return state},ready,managesPersistence:true,initialSnapshot:structuredClone(baseline.snapshot),
     get capabilities(){return getExlsxCapabilities(readOnly,state==='ready')},
     supportsMutation:id=>id===SET_CELLS||id===MOVE_CELLS||id===SET_FROZEN||id===REORDER||!!featureMutations[id]||isSizeMutation(id),
-    validateLocalMutation:mutation=>{prepare(mutation)},
+    validateLocalMutation:mutation=>{appendFilterWrite(mutation,prepare(mutation))},
     async editStructure(edit:StructuralEdit){
       writable();if(editing)throw new ExlsxSessionError('UNSUPPORTED_OPERATION','Finish the current cell draft before a local structural edit')
       if(!['row','column'].includes(edit.axis)||!['insert','delete'].includes(edit.action))throw new ExlsxSessionError('INVALID_UPDATE','Invalid structural operation')
