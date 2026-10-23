@@ -3,12 +3,15 @@ import type {SpreadsheetEditorHandle} from './types'
 import type {SpreadsheetInlineActions,SpreadsheetNativeText,SpreadsheetTextTarget} from './inlineTypes'
 import {safeInlineHref,validateInlineNode} from './inlineModel'
 import type {EditorTranslator} from './i18n'
+import {holdNativeTextFocus} from './nativeFocus'
 
 /** View-only UI until confirmation: insertion uses the native captured draft transaction. */
 export function InlineInsertDialog({handle,mode,actions,onClose,readOnly,t}:{handle:SpreadsheetEditorHandle;mode:'link'|'document';actions?:SpreadsheetInlineActions;onClose:()=>void;readOnly:boolean;t:EditorTranslator}) {
   const [ready,setReady]=useState(false),[error,setError]=useState(''),[text,setText]=useState(''),[href,setHref]=useState('')
   const target=useRef<SpreadsheetTextTarget|null>(null),api=useRef<SpreadsheetNativeText|null>(null),controller=useRef<AbortController|null>(null)
   const textInput=useRef<HTMLInputElement>(null)
+  const releaseFocus=useRef<(()=>void)|null>(null)
+  const release=()=>{releaseFocus.current?.();releaseFocus.current=null}
   const current=useRef({handle,readOnly,onClose,actions,t});current.current={handle,readOnly,onClose,actions,t}
   useEffect(()=>{
     const abort=new AbortController();controller.current=abort
@@ -19,6 +22,7 @@ export function InlineInsertDialog({handle,mode,actions,onClose,readOnly,t}:{han
         const state=await native.begin()
         if(abort.signal.aborted)return
         if(current.current.readOnly)throw new Error('READ_ONLY')
+        releaseFocus.current=holdNativeTextFocus(native)
         const captured=native.capture();if(!captured)throw new Error(current.current.t('inline.captureFailed'))
         target.current=captured
         setText(state.text.slice(state.startOffset,state.endOffset));setReady(true)
@@ -28,17 +32,18 @@ export function InlineInsertDialog({handle,mode,actions,onClose,readOnly,t}:{han
           if(abort.signal.aborted)return
           if(current.current.readOnly)throw new Error('READ_ONLY')
           if(selected){const node={type:'document',refId:selected.documentId,label:`📄 ${selected.title}`};validateInlineNode(node);native.insert(captured,{kind:'atomic',node});target.current=null}
-          native.focus();current.current.onClose()
+          release();native.focus();current.current.onClose()
         }
       }catch(e){if(!abort.signal.aborted)setError(String(e))}
     }
     void prepare()
-    return()=>{abort.abort();if(target.current)api.current?.release(target.current);target.current=null}
+    return()=>{abort.abort();release();if(target.current)api.current?.release(target.current);target.current=null}
   },[mode])
-  useEffect(()=>{if(readOnly){controller.current?.abort();if(target.current)api.current?.release(target.current);target.current=null;setReady(false);setError(t('inline.readOnlyCancelled'))}},[readOnly,t])
+  useEffect(()=>{if(readOnly){controller.current?.abort();release();if(target.current)api.current?.release(target.current);target.current=null;setReady(false);setError(t('inline.readOnlyCancelled'))}},[readOnly,t])
   useEffect(()=>{if(ready&&mode==='link'&&!readOnly)textInput.current?.focus()},[ready,mode,readOnly])
   const cancel=()=>{
     controller.current?.abort()
+    release()
     if(target.current)api.current?.release(target.current)
     target.current=null
     if(!readOnly)api.current?.focus()
@@ -50,6 +55,7 @@ export function InlineInsertDialog({handle,mode,actions,onClose,readOnly,t}:{han
       safeInlineHref(href)
       const ok=api.current.insert(target.current,{kind:'link',text:text||href,href});target.current=null
       if(!ok)throw new Error(t('inline.linkNotInserted'))
+      release()
       api.current.focus()
       onClose()
     }catch(e){setError(String(e))}

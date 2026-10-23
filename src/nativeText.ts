@@ -7,6 +7,7 @@ import { getCoordByOffset, getCustomRangePosition, IEditorBridgeService, SheetSk
 import { INLINE_PROPERTY, inlineBody, validateInlineBody } from './inlineModel'
 import {inlineFragment,validateInlineDocument} from './inlineMedia'
 import {reconcileNativeInlineDeletion} from './nativeInlineMutation'
+import {attachNativeFocusOwner} from './nativeFocus'
 import type {IRichTextEditingMutationParams} from '@univerjs/docs'
 import type { SpreadsheetNativeText, SpreadsheetTextEditState, SpreadsheetInlineNodeEvent } from './inlineTypes'
 
@@ -43,10 +44,11 @@ export function createNativeText(injector: Injector, container: HTMLElement) {
       for(const id of order)drawings[id]=structuredClone(doc.drawings![id])
       const result={id:'clipboard-fragment',body,drawings,drawingsOrder:order} as IDocumentData;validateInlineDocument(result);return result
     },
-    focus(){const d=draft();if(!d||disposed)return false;const render=injector.get(IRenderManagerService).getRenderById(d.unitId);if(!render)return false;render.with(DocSelectionRenderService).focus();return true},
+    focus(){const d=draft();if(!d||disposed)return false;const render=injector.get(IRenderManagerService).getRenderById(d.unitId);if(!render)return false;focusOwner.focus(()=>render.with(DocSelectionRenderService).focus());return true},
     selectRange(range){const d=draft();if(!d||disposed)return false;const target=api.capture(range);if(!target)return false;api.release(target);selections.replaceDocRanges([{...range}],{unitId:d.unitId,subUnitId:d.unitId},false);api.focus();return true},
     async begin() {
       if(disposed)throw new Error('DISPOSED')
+      focusOwner.refresh()
       const existing=api.getState()
       if(existing){if(existing.formula)throw new Error('FORMULA_INLINE_UNSUPPORTED');return existing}
       const location=bridge.getEditLocation()
@@ -61,7 +63,7 @@ export function createNativeText(injector: Injector, container: HTMLElement) {
         const current=bridge.getEditLocation()
         if(!current||JSON.stringify([current.unitId,current.sheetId,current.row,current.column])!==identity)throw new Error('STALE_TEXT_TARGET')
         const state=api.getState()
-        if(state){if(state.formula)throw new Error('FORMULA_INLINE_UNSUPPORTED');return state}
+        if(state){if(state.formula)throw new Error('FORMULA_INLINE_UNSUPPORTED');focusOwner.refresh();return state}
       }
       throw new Error('TEXT_EDIT_UNAVAILABLE')
     },
@@ -121,6 +123,7 @@ export function createNativeText(injector: Injector, container: HTMLElement) {
       return Boolean(commands.syncExecuteCommand('doc.mutation.rich-text-editing',{unitId:d.unitId,actions,trigger:'exlsx.command.insert-inline-media',textRanges:[{startOffset:caret,endOffset:caret,collapsed:true}]}))
     },
   }
+  const focusOwner=attachNativeFocusOwner(injector,api)
   function notify() { if(queued)return;queued=true;queueMicrotask(()=>{queued=false;if(!disposed){const state=api.getState();listeners.forEach(l=>l(state))}}) }
   function invalidate() { revision++;targets.clear();bridge.disableForceKeepVisible();notify() }
   const subs=[commands.onCommandExecuted(c=>{if(c.id==='doc.mutation.rich-text-editing')invalidate()}),selections.textSelection$.subscribe(notify),bridge.visible$.subscribe(invalidate),bridge.currentEditCellState$.subscribe(invalidate)]
@@ -187,5 +190,5 @@ export function createNativeText(injector: Injector, container: HTMLElement) {
   container.addEventListener('pointerleave', leaveNode)
   const start=()=>{composing=true;invalidate()},end=()=>{composing=false;notify()}
   container.addEventListener('compositionstart',start,true);container.addEventListener('compositionend',end,true)
-  return {api,dispose(){disposed=true;editingController._isCellImageData=isCellImage;targets.clear();bridge.disableForceKeepVisible();listeners.clear();nodeListeners.clear();for(const s of subs){if('dispose' in s)s.dispose();else s.unsubscribe()}container.removeEventListener('compositionstart',start,true);container.removeEventListener('compositionend',end,true);container.removeEventListener('pointermove',moveNode,true);container.removeEventListener('click',clickNode,true);container.removeEventListener('pointerleave',leaveNode)}}
+  return {api,dispose(){disposed=true;focusOwner.dispose();editingController._isCellImageData=isCellImage;targets.clear();bridge.disableForceKeepVisible();listeners.clear();nodeListeners.clear();for(const s of subs){if('dispose' in s)s.dispose();else s.unsubscribe()}container.removeEventListener('compositionstart',start,true);container.removeEventListener('compositionend',end,true);container.removeEventListener('pointermove',moveNode,true);container.removeEventListener('click',clickNode,true);container.removeEventListener('pointerleave',leaveNode)}}
 }

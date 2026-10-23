@@ -44,7 +44,7 @@ export function DropdownListDialog({handle,readOnly,onClose,t}:{handle:Spreadshe
       if(sheet?.getSheetId()!==selection.sheetId)throw Error(t('dropdown.sheetChanged'))
       const range=sheet.getRange(selection.startRow,selection.startColumn,selection.endRow-selection.startRow+1,selection.endColumn-selection.startColumn+1)
       if(JSON.stringify(readRule(range))!==JSON.stringify(target.rule))throw Error(t('dropdown.ruleChanged'))
-      const unitId=runtime.univerAPI.getActiveWorkbook()?.getWorkbook?.().getUnitId()
+      const unitId=runtime.univerAPI.getActiveWorkbook()?.getWorkbook?.()?.getUnitId()
       if(!unitId)throw Error(t('dropdown.runtime'))
       const {sheetId,...cells}=selection,base={unitId,subUnitId:sheetId}
       const payload=remove?{...base,ranges:[cells]}:{...base,rule:{uid:crypto.randomUUID(),...dropdownFields(options,multiple,colored,t),allowBlank,showDropDown:true,ranges:[cells]}}
