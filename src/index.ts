@@ -4,6 +4,8 @@ export {
   SpreadsheetEditor,
 } from './SpreadsheetEditor'
 export type { SpreadsheetEditorProps } from './SpreadsheetEditor'
+export { isSpreadsheetViewPreferences } from './preferences'
+export type { SpreadsheetViewPreferences } from './preferences'
 export { createDefaultSpreadsheetRuntime } from './runtime'
 export { SPREADSHEET_MENU_PATHS, resolveSpreadsheetMenuPath } from './menuPaths'
 export { builtInEditorLocales, createTranslator, enEditorMessages, enUSEditorLocale, intlLocale, resolveLocale, zhEditorMessages, zhCNEditorLocale } from './i18n'

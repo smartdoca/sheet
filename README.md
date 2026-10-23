@@ -31,6 +31,8 @@ export function Sheet({ id }: { id: string }) {
 | `workbookName` | `string` | Display name. |
 | `initialSnapshot` | `WorkbookSnapshot` | Snapshot applied when the editor mounts. |
 | `readOnly` | `boolean` | Stops cell editing. |
+| `viewPreferences` | `SpreadsheetViewPreferences` | Personal document-wide `{ zoomRatio }`; `1` is 100%. |
+| `onViewPreferencesChange` | `(value: SpreadsheetViewPreferences) => void` | Successful native zoom changes; props and sheet switches do not call it. |
 | `collaboration` | `CollaborationAdapter` | Host bridge for workbook changes. |
 | `persistence` | `WorkbookPersistenceAdapter` | Optional local persistence. Do not add a second autosave path beside the host. |
 | `resourceAdapter` | `ResourceAdapter` | Host file and image storage. |
@@ -58,6 +60,24 @@ export function Sheet({ id }: { id: string }) {
 `initialRows`, `initialColumns`, `autoFitContent`, menus, image upload, and inline actions are also on `SpreadsheetEditorProps`.
 
 Updating props, readonly, or selection must not rebuild the workbook.
+
+## Personal zoom and cell dimensions
+
+```tsx
+<SpreadsheetEditor
+  workbookId={id}
+  viewPreferences={viewPreferences} // Host state, e.g. { zoomRatio: 1 }.
+  onViewPreferencesChange={setViewPreferences}
+/>
+```
+
+`zoomRatio` is a finite number from `0.1` through `4`. One personal scale follows the document across worksheet switches, native additions, remote projection and resize. The native slider, +/- controls, menu and wheel report successful changes, including readonly. Updating props applies silently and does not recreate the editor; a host update during a native cell draft waits until editing ends. The host should update its state before attempting storage so a storage failure retains the current choice. Omitting both props retains existing native behavior; supplying only the callback observes the native initial scale. Removing a callback stops notifications; removing a controlled value retains the mounted view's current personal scale.
+
+The package has no account lookup or browser storage. `isSpreadsheetViewPreferences` from `@smartdoca/sheet/preferences` validates exactly `{ zoomRatio }` without importing React, Univer, or Yjs. The host validates its own record version and scope separately. Doca uses default 100% and a version-1 browser record scoped by origin/account/document, written only after explicit native changes. Missing records do not create records. Unknown/malformed records remain unused and are not overwritten; storage failures retain only the current view choice. Rollback stops consuming records and preserves them.
+
+Personal zoom is excluded from content transactions, undo, autosave and package snapshot/save/export boundaries. Original `zoomRatio` fields, including omission, are preserved there; `getRuntime()` still exposes the native runtime's current display scale. Canonical baselines, checkpoints, seeds, pending updates and explicit axis sizes are not rewritten. A custom runtime must support native view operations or reports `VIEW_PREFERENCES_UNSUPPORTED`; invalid props report `INVALID_VIEW_PREFERENCES` through `onError`.
+
+At 100%, new worksheets use 21.78 px rows and 87.12 px columns (10% larger than 19.8/79.2). The owner also approved these defaults for historical CRDT-added worksheets that have no saved default dimensions, and virtual recovery sheets. Immutable baseline worksheets keep saved defaults and omitted fields; explicit per-row/per-column sizes remain overrides. This approved default projection changes no schema-6 bytes or lineage and performs no migration/backfill. Earlier packages may display unsized appended/recovery sheets with earlier defaults; rollback must preserve later edits. Hosts creating their own initial baseline should supply the same dimensions explicitly.
 
 ## Attachment preview
 
@@ -96,4 +116,5 @@ Other entry points:
 |---|---|
 | `@smartdoca/sheet/yjs` | Yjs session, restore, and local transactions. |
 | `@smartdoca/sheet/model` | Workbook projection and recovery. |
+| `@smartdoca/sheet/preferences` | Pure personal-view preference type and validator. |
 | `@smartdoca/sheet/xlsx` | `xlsxToSnapshot` and `snapshotToXlsx`. |

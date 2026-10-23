@@ -59,6 +59,26 @@ export function Sheet({ id }: { id: string }) {
 
 更新 props、只读或选区不能重建工作簿。
 
+## 个人缩放与默认单元格尺寸
+
+`SpreadsheetEditor` 新增可选 `viewPreferences?: SpreadsheetViewPreferences` 和 `onViewPreferencesChange?: (value: SpreadsheetViewPreferences) => void`：
+
+```tsx
+<SpreadsheetEditor
+  workbookId={id}
+  viewPreferences={viewPreferences} // 宿主状态，例如 { zoomRatio: 1 }。
+  onViewPreferencesChange={setViewPreferences}
+/>
+```
+
+`SpreadsheetViewPreferences` 仅含 `zoomRatio: number`，有限值范围 0.1～4，1 为 100%。同篇文档使用一个个人缩放比例；切换或新增 worksheet、远端投影与 resize 不重置。原生滑块、加减按钮、菜单和滚轮成功调整后回调，只读模式也可调整。应用 props 不回调、不重建编辑器；原生单元格草稿编辑中收到宿主缩放更新，结束编辑后再应用。宿主先更新当前状态，再尝试缓存，缓存失败仍保留本次选择。两个 props 都省略时保留原生行为；只传回调时从当前原生比例开始。移除回调停止通知，移除受控值保留当前视图的个人比例。
+
+`@smartdoca/sheet/preferences` 导出 `SpreadsheetViewPreferences` 和纯函数 `isSpreadsheetViewPreferences`，严格校验仅含 `zoomRatio` 的对象，不加载 React、Univer 或 Yjs。宿主自行校验缓存记录版本与身份作用域。包内不读身份或浏览器缓存。Doca 默认仍为 100%，按网站、账号、文档保存 version 1 记录，只在明确原生调整后写入；无记录不写缓存，未知/坏记录保留拒用且不覆盖，存储失败仅当前视图生效，回退停读并保留记录。
+
+个人缩放不进入正文事务、撤销、自动保存及包提供的快照/保存/导出边界；这些边界保留原有 `zoomRatio` 字段，包括缺省。`getRuntime()` 仍可读取原生运行时当前显示比例。原 baseline、seed、checkpoint、待发送 update 和显式行列尺寸不重写。自定义运行时不支持原生视图操作时通过 `onError` 报告 `VIEW_PREFERENCES_UNSUPPORTED`；非法 props 报告 `INVALID_VIEW_PREFERENCES`。
+
+100% 下，新建工作表默认行高 21.78 px、列宽 87.12 px，比原 19.8/79.2 增大 10%。用户同时批准未记录默认尺寸的历史 CRDT 附加工作表和虚拟恢复表采用新默认。不可变 baseline 的已保存默认尺寸与字段缺省原样保留，显式逐行/逐列尺寸继续覆盖默认。此为获批默认投影规则，无 schema 6、谱系、数据转换或字段回填。回退旧包可能恢复旧默认显示，必须保留后续编辑；宿主创建首个 baseline 时应显式传入相同尺寸。
+
 ## 附件预览
 
 ```tsx

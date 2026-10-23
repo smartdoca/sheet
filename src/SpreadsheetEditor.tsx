@@ -29,6 +29,8 @@ import type { SpreadsheetAttachmentPreviewHandler,SpreadsheetImagePreviewHandler
 import {isFormulaProjection} from './transactionOrigin'
 import { sanitizeWorkbookSnapshot } from './snapshot'
 import { DEFAULT_WORKSHEET_DIMENSIONS } from './worksheetDefaults'
+import { createViewPreferencesController } from './nativeViewPreferences'
+import type { SpreadsheetViewPreferences } from './preferences'
 import { operationForNativeCommand, type ExlsxOperation } from './capabilities'
 import { snapshotToXlsx, xlsxToSnapshot } from './xlsx'
 import type { XlsxOptions, XlsxWarning } from './xlsx'
@@ -122,6 +124,10 @@ export interface SpreadsheetEditorProps {
   /** `simple` flattens native categories; the separate insertion row stays visible. */
   toolbarLayout?: SpreadsheetToolbarLayout
   readOnly?: boolean
+  /** Personal document-wide scale; 1 is 100%. No browser storage or content writes. */
+  viewPreferences?: SpreadsheetViewPreferences
+  /** Successful native zoom interaction only; applying props never calls this. */
+  onViewPreferencesChange?: (value: SpreadsheetViewPreferences) => void
   autoSave?: boolean
   autoSaveDelay?: number
   initialRows?: number
@@ -318,6 +324,8 @@ export const SpreadsheetEditor = forwardRef<
     runtimeFactory = createDefaultSpreadsheetRuntime,
     toolbarLayout = 'two-row',
     readOnly = false,
+    viewPreferences,
+    onViewPreferencesChange,
     autoSave = true,
     autoSaveDelay = 1500,
     initialRows = DEFAULT_SHEET_ROWS,
@@ -350,6 +358,11 @@ export const SpreadsheetEditor = forwardRef<
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cellImageInputRef = useRef<HTMLInputElement>(null)
   const runtimeRef = useRef<SpreadsheetRuntime | null>(null)
+  const viewControllerRef = useRef<ReturnType<typeof createViewPreferencesController> | null>(null)
+  const viewPreferencesRef = useRef(viewPreferences)
+  const onViewPreferencesChangeRef = useRef(onViewPreferencesChange)
+  viewPreferencesRef.current = viewPreferences
+  onViewPreferencesChangeRef.current = onViewPreferencesChange
   const runtimeDisposalRef = useRef<Promise<void>>(Promise.resolve())
   const refreshPackageMenusRef = useRef<() => void>(() => {})
   const importedSnapshotRef = useRef<WorkbookSnapshot | null>(null)
@@ -502,7 +515,8 @@ export const SpreadsheetEditor = forwardRef<
   const getSnapshot = useCallback(() => {
     const workbook = runtimeRef.current?.univerAPI.getActiveWorkbook()
     if (!workbook) throw new Error('Spreadsheet is not ready')
-    const snapshot=sanitizeWorkbookSnapshot(workbook.save())
+    const saved = workbook.save()
+    const snapshot=sanitizeWorkbookSnapshot(viewControllerRef.current?.projectSnapshot(saved) ?? saved)
     const floating=collaborationRef.current?.getFloatingObjects?.()
     if(floating)snapshot.resources=[...(snapshot.resources??[]).filter(r=>r.name!=='EXLSX_FLOATING_OBJECTS'),...(floating.length?[{name:'EXLSX_FLOATING_OBJECTS',data:JSON.stringify(floating)}]:[])]
     return snapshot
@@ -1599,7 +1613,10 @@ export const SpreadsheetEditor = forwardRef<
             workbook,
             initialSnapshot: loaded?.snapshot ?? initialSnapshot,
             setReadOnly: setEditorReadOnly,
-            getSnapshot: () => sanitizeWorkbookSnapshot(workbook.save()),
+            getSnapshot: () => {
+              const saved = workbook.save()
+              return sanitizeWorkbookSnapshot(viewControllerRef.current?.projectSnapshot(saved) ?? saved)
+            },
             ...(workbook.getWorkbook ? { getStyleById: (id: string) => workbook.getWorkbook!()?.getStyles().get(id) ?? null } : {}),
             onLocalMutation: (listener) => {
               collaborationListenersRef.current.add(listener)
@@ -1639,6 +1656,19 @@ export const SpreadsheetEditor = forwardRef<
         if (abortController.signal.aborted) { disposeCollaboration?.(); return }
         await runtime.whenRendered?.(abortController.signal)
         if (abortController.signal.aborted) return
+        const viewController = createViewPreferencesController({
+          api: runtime.univerAPI, workbookId,
+          initialSnapshot: loaded?.snapshot ?? initialSnapshot,
+          isEditing: () => editingCellRef.current,
+          onChange: value => onViewPreferencesChangeRef.current?.(value),
+          onError: error => onErrorRef.current?.(error),
+        })
+        viewControllerRef.current = viewController
+        customComponentDisposers.push(() => {
+          viewController.dispose()
+          if (viewControllerRef.current === viewController) viewControllerRef.current = null
+        })
+        viewController.configure(viewPreferencesRef.current, Boolean(onViewPreferencesChangeRef.current))
         workbook.setEditable(!readOnlyRef.current)
         runtime.formatPainter?.setGuard(()=>!readOnlyRef.current&&!editingCellRef.current&&(!collaborationRef.current||collaborationRef.current.capabilities?.formatPainter?.enabled===true))
         await new Promise<void>(resolve => requestAnimationFrame(() => resolve()))
@@ -1719,6 +1749,10 @@ export const SpreadsheetEditor = forwardRef<
   useEffect(() => {
     setEditorReadOnly(readOnly)
   }, [readOnly, setEditorReadOnly])
+
+  useEffect(() => {
+    viewControllerRef.current?.configure(viewPreferences, Boolean(onViewPreferencesChange))
+  }, [viewPreferences?.zoomRatio, Boolean(onViewPreferencesChange)])
 
   useEffect(() => {
     remoteSelectionsRef.current = remoteSelections.filter((item) => item.sessionId !== currentSessionId)

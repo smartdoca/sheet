@@ -6,6 +6,7 @@ export default defineConfig({
     yjs: 'src/yjs.ts',
     model: 'src/model.ts',
     xlsx: 'src/xlsx.ts',
+    preferences: 'src/preferences.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
