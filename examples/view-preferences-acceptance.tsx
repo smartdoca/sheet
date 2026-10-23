@@ -41,7 +41,7 @@ export async function mountViewPreferencesAcceptance(element: HTMLElement) {
     useEffect(() => {
       const listener = (event: StorageEvent) => {
         if (event.key !== key || !event.newValue) return
-        try { const record = JSON.parse(event.newValue); if (record.version === 1 && isSpreadsheetViewPreferences({ zoomRatio: record.zoomRatio })) setPreferences({ zoomRatio: record.zoomRatio }) } catch { /* Preserve unreadable records. */ }
+        try { const record = JSON.parse(event.newValue); if (record?.version === 1 && Object.keys(record).sort().join(',') === 'version,zoomRatio' && isSpreadsheetViewPreferences({ zoomRatio: record.zoomRatio })) setPreferences({ zoomRatio: record.zoomRatio }) } catch { /* Preserve unreadable records. */ }
       }
       addEventListener('storage', listener); return () => removeEventListener('storage', listener)
     }, [])
