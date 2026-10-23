@@ -12,6 +12,7 @@ import {attachFormatPainter} from './nativeFormatPainter'
 import {attachNativeFilterRender} from './nativeFilterRender'
 import {attachNativeFilterRefresh} from './nativeFilterRefresh'
 import {attachNativeDropdownDelete} from './nativeDropdownDelete'
+import {attachNativeAutoHeightDisposal} from './nativeAutoHeightDisposal'
 
 /** Pure, sparse run query; never converts the draft back to a sheet cell. */
 export function queryTextStyles(body: IDocumentBody, start: number, end: number, defaults: ITextStyle = {}) {
@@ -47,6 +48,7 @@ export class TextFormattingPlugin extends Plugin {
   static override type=UniverInstanceType.UNIVER_SHEET
   private derivedLayout?:ReturnType<typeof attachDerivedAutoHeight>
   private filterRender?:ReturnType<typeof attachNativeFilterRender>
+  private autoHeightDisposal?:ReturnType<typeof attachNativeAutoHeightDisposal>
   constructor(private readonly config:Config, protected readonly _injector:Injector){super()}
   override onReady() {
     const media=attachInlineMediaRender(this._injector,this.config.container,{preview:this.config.imagePreview,labels:this.config.imageLabels});this.config.bindImages?.(id=>media.refreshImages(id));this.disposeWithMe(media)
@@ -56,6 +58,7 @@ export class TextFormattingPlugin extends Plugin {
     this.filterRender=attachNativeFilterRender(this._injector);this.disposeWithMe(this.filterRender)
     this.disposeWithMe(attachNativeFilterRefresh(this._injector))
     this.disposeWithMe(attachNativeDropdownDelete(this._injector))
+    this.autoHeightDisposal=attachNativeAutoHeightDisposal(this._injector);this.disposeWithMe(this.autoHeightDisposal)
     const native=createNativeText(this._injector,this.config.container)
     this.disposeWithMe(attachNativeClipboard(this._injector,native.api))
     const painter=attachFormatPainter(this._injector);this.config.bindPainter?.(painter);this.disposeWithMe(painter)
@@ -95,6 +98,7 @@ export class TextFormattingPlugin extends Plugin {
   override onRendered(){
     // The filter UI registers its render module at this lifecycle stage.
     this.filterRender?.refresh()
+    this.autoHeightDisposal?.refresh()
     // Recovery intentionally excludes derived `ah`. Re-measure populated rows
     // after native validation renderers exist, without authored mutations.
     const units=this._injector.get(IUniverInstanceService)

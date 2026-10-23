@@ -29,7 +29,7 @@ import { UniverSheetsTablePreset } from '@univerjs/preset-sheets-table'
 import UniverPresetSheetsTableZhCN from '@univerjs/preset-sheets-table/locales/zh-CN'
 import UniverPresetSheetsTableEnUS from '@univerjs/preset-sheets-table/locales/en-US'
 import { LocaleService,IUniverInstanceService,UniverInstanceType,type DocumentDataModel } from '@univerjs/core'
-import {IEditorBridgeService} from '@univerjs/sheets-ui'
+import {HoverManagerService,IEditorBridgeService} from '@univerjs/sheets-ui'
 import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets'
 import { createTranslator,univerLocale } from './i18n'
 
@@ -40,6 +40,7 @@ import { createCapabilityMenuConfig } from './capabilityMenus'
 import { HostMenusPlugin } from './hostMenus'
 import { TextFormattingPlugin } from './textFormatting'
 import {collectImageGallery} from './imageGallery'
+import {clearHoverBeforeDispose} from './nativeDisposal'
 
 import '@univerjs/preset-sheets-core/lib/index.css'
 import '@univerjs/preset-sheets-conditional-formatting/lib/index.css'
@@ -102,6 +103,10 @@ export const createDefaultSpreadsheetRuntime: SpreadsheetRuntimeFactory = ({
     ],
   })
 
+  // Sheet services register when the first workbook activates its plugins.
+  // An aborted runtime may be disposed before it ever owns a workbook.
+  let hover:HoverManagerService|undefined
+  clearHoverBeforeDispose(runtime.univer,{triggerScroll:()=>hover?.triggerScroll()})
   let updateHostMenus: NonNullable<ReturnType<SpreadsheetRuntimeFactory>['updateHostMenus']> = () => undefined
   let getTextFormatState: NonNullable<ReturnType<SpreadsheetRuntimeFactory>['getTextFormatState']> = () => null
   let nativeText: ReturnType<SpreadsheetRuntimeFactory>['nativeText']
@@ -123,6 +128,7 @@ export const createDefaultSpreadsheetRuntime: SpreadsheetRuntimeFactory = ({
     }
   }
   const gridlineRegistration = runtime.univerAPI.addEvent(runtime.univerAPI.Event.WorkbookCreated, ({ unitId }) => {
+    hover=runtime.univer.__getInjector().get(HoverManagerService)
     pendingGridlines.add(unitId)
     // WorkbookCreated precedes the render unit. Attach after creation observers
     // finish, and only once the public rendering lifecycle is ready.

@@ -1097,7 +1097,7 @@ export const SpreadsheetEditor = forwardRef<
       const r=range??getSelection();if(!r)throw new Error('Select a cell range')
       if(pattern.length>256)throw new Error('Number format exceeds 256 characters')
       const runtime=runtimeRef.current
-      const unitId=runtime?.univerAPI.getActiveWorkbook()?.getWorkbook?.().getUnitId()
+      const unitId=runtime?.univerAPI.getActiveWorkbook()?.getWorkbook?.()?.getUnitId()
       const result=unitId&&await runtime?.univerAPI.executeCommand(SetStyleCommand.id,{unitId,subUnitId:r.sheetId,range:r,style:{type:'n',value:{pattern}}})
       if(!result)throw new Error('Number format command rejected')
     },
@@ -1110,7 +1110,7 @@ export const SpreadsheetEditor = forwardRef<
       const scroll = sheet.getScrollState();
       const first = sheet.getRange(0, 0, 1, 1).getCellRect();
       const start = sheet.getRange(scroll.sheetViewStartRow, scroll.sheetViewStartColumn, 1, 1).getCellRect();
-      const freeze=runtimeRef.current?.univerAPI.getActiveWorkbook()?.getWorkbook?.().getSheetBySheetId(r.sheetId)?.getConfig().freeze
+      const freeze=runtimeRef.current?.univerAPI.getActiveWorkbook()?.getWorkbook?.()?.getSheetBySheetId(r.sheetId)?.getConfig().freeze
       const frozenColumn=freeze&&freeze.xSplit>0&&r.startColumn<freeze.startColumn,frozenRow=freeze&&freeze.ySplit>0&&r.startRow<freeze.startRow
       const x = canvas.left + (frozenColumn?rect.left:rect.left - start.left + first.left - scroll.offsetX) * zoom;
       const y = canvas.top + (frozenRow?rect.top:rect.top - start.top + first.top - scroll.offsetY) * zoom;
@@ -1600,7 +1600,7 @@ export const SpreadsheetEditor = forwardRef<
             initialSnapshot: loaded?.snapshot ?? initialSnapshot,
             setReadOnly: setEditorReadOnly,
             getSnapshot: () => sanitizeWorkbookSnapshot(workbook.save()),
-            ...(workbook.getWorkbook ? { getStyleById: (id: string) => workbook.getWorkbook!().getStyles().get(id) ?? null } : {}),
+            ...(workbook.getWorkbook ? { getStyleById: (id: string) => workbook.getWorkbook!()?.getStyles().get(id) ?? null } : {}),
             onLocalMutation: (listener) => {
               collaborationListenersRef.current.add(listener)
               return () => collaborationListenersRef.current.delete(listener)

@@ -8,9 +8,11 @@ export function CellObjects({ handle, renderer, t }: { handle: SpreadsheetEditor
   const runtime = handle.getRuntime()
   const [items, setItems] = useState<{ key: string; object: SpreadsheetCellObject; rect: DOMRect }[]>([])
   useEffect(() => {
-    if (!renderer) return // No renderer means no scans, timers, or snapshot serialization.
+    if (!renderer || !runtime) return // No renderer means no scans, timers, or snapshot serialization.
     const objects = new Map<string, { row: number; column: number; object: SpreadsheetCellObject }>()
-    let sheetId = ''; let frame = 0
+    let sheetId = ''; let frame = 0; let disposed = false
+    const live = () => !disposed && handle.getRuntime() === runtime
+    const workbook = () => live() ? runtime.univerAPI.getActiveWorkbook()?.getWorkbook?.() : null
     const remember = (row: number, column: number, cell: any) => {
       const key = `${row}:${column}`; const object = cell?.custom?.officeObject as SpreadsheetCellObject | undefined
       if (object?.version === 1 && cell.v === (object.kind === 'mention' ? '@' : '') + object.label) objects.set(key, {row,column,object})
@@ -18,14 +20,14 @@ export function CellObjects({ handle, renderer, t }: { handle: SpreadsheetEditor
     }
     const rebuild = () => {
       objects.clear()
-      const book = handle.getRuntime()?.univerAPI.getActiveWorkbook()
-      const sheet = book?.getActiveSheet(); sheetId = sheet?.getSheetId() ?? ''
-      book?.getWorkbook?.().getSheetBySheetId(sheetId)?.getCellMatrix().forValue((r,c,cell) => {remember(r,c,cell)})
+      const sheet = workbook()?.getActiveSheet(); sheetId = sheet?.getSheetId() ?? ''
+      sheet?.getCellMatrix().forValue((r,c,cell) => {remember(r,c,cell)})
     }
     const refresh = () => {
+      if (!live()) return
       try {
-      const sheet = handle.getRuntime()?.univerAPI.getActiveWorkbook()?.getActiveSheet()
-      if (!sheet) return
+      const sheet = workbook()?.getActiveSheet()
+      if (!sheet) {setItems([]);return}
       if (sheet.getSheetId() !== sheetId) rebuild()
       const next: typeof items = []
       for (const [key, {row:r,column:c,object}] of objects) {
@@ -36,12 +38,13 @@ export function CellObjects({ handle, renderer, t }: { handle: SpreadsheetEditor
       setItems(next)
       } catch { setItems([]) } // Native render services are not ready during bootstrap/disposal.
     }
-    const schedule = () => { if (!frame) frame = requestAnimationFrame(() => {frame=0;refresh()}) }
+    const schedule = () => { if (live() && !frame) frame = requestAnimationFrame(() => {frame=0;refresh()}) }
     rebuild(); schedule()
-    const api = handle.getRuntime()?.univerAPI
+    const api = runtime.univerAPI
     const sub = api?.addEvent('CommandExecuted', event => {
+      if (!live()) return
       if (event.type === 2 && event.params?.subUnitId === sheetId) {
-        const sheet = api.getActiveWorkbook()?.getWorkbook?.().getSheetBySheetId(sheetId)
+        const sheet = workbook()?.getSheetBySheetId(sheetId)
         const values = event.params?.cellValue as Record<string,Record<string,unknown>> | undefined
         if (values) for (const [r,row] of Object.entries(values)) for (const c of Object.keys(row)) remember(+r,+c,sheet?.getCell(+r,+c))
         else rebuild()
@@ -49,7 +52,7 @@ export function CellObjects({ handle, renderer, t }: { handle: SpreadsheetEditor
       schedule()
     })
     window.addEventListener('resize',schedule);window.addEventListener('scroll',schedule,true)
-    return () => {sub?.dispose();cancelAnimationFrame(frame);window.removeEventListener('resize',schedule);window.removeEventListener('scroll',schedule,true)}
+    return () => {disposed=true;sub?.dispose();cancelAnimationFrame(frame);window.removeEventListener('resize',schedule);window.removeEventListener('scroll',schedule,true)}
   }, [runtime, renderer])
   if (!renderer) return null
   const retry = (t ?? createTranslator())('object.retry')

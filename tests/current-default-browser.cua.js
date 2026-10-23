@@ -51,10 +51,10 @@ export async function verifyDefaultInsertions(a,b) {
   await button(a,'插入').click();await a.playwright.getByRole('menuitem',{name:'超链接',exact:true}).click()
   await a.playwright.getByRole('textbox',{name:'链接显示文字',exact:true}).fill('需求链接')
   await a.playwright.getByRole('textbox',{name:'链接地址',exact:true}).fill('https://example.com/requirements')
-  await button(a,'插入链接').click();await a.pressKey('Return')
+  await button(a,'插入链接').click();await a.pressKey(null,'Return')
   await select(a,'A1')
   await button(a,'插入').click();await a.playwright.getByRole('menuitem',{name:'站内文档',exact:true}).click()
-  await button(a,'选择需求文档').click();await a.pressKey('Return')
+  await button(a,'选择需求文档').click();await a.pressKey(null,'Return')
   const first=await read(a),peer=await read(b),body=first.rows[0][0].p.body
   assert(body.dataStream==='记录需求链接📄 需求文档\r\n','surrounding text preserved')
   assert(body.customRanges.some(r=>r.properties?.url==='https://example.com/requirements'),'link address retained')
