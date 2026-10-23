@@ -44,7 +44,9 @@ function App() {
 }
 
 const acceptanceRoom = new URLSearchParams(location.search).get('host-test')
-if (new URLSearchParams(location.search).has('lifecycle-test')) {
+if (new URLSearchParams(location.search).has('filter-range-test')) {
+  void import('./filter-range-test').then(m=>m.mountFilterRangeTest())
+} else if (new URLSearchParams(location.search).has('lifecycle-test')) {
   void import('./lifecycle-test').then(m=>m.mountLifecycleTest())
 } else if (new URLSearchParams(location.search).has('filter-media-test')) {
   void import('./filter-media-test').then(m=>m.mountFilterMediaTest())
