@@ -30,6 +30,14 @@ const session = await createExlsxCollaborationSession({
 
 资源上传、解析、下载及撤权由宿主的 `resourceAdapter` 实现。永久评论正文与 ACL 由 Doca 保存；表格包只处理稳定区域锚点和视图定位。编辑权限由宿主决定，并通过 `readOnly` 与 `session.setReadOnly` 同时收口。
 
+### 评论临时背景（0.2.14）
+
+`SpreadsheetEditorProps.commentHighlightAnchor?: SpreadsheetCommentAnchor | null` 使用当前会话的 `resolveCellAnchorRanges` 绘制原生半透明背景，支持当前 version-4 稳定锚点、单格、区域及排序后的多段。无当前解析能力或目标失效时不显示，不增加旧格式解析或协议适配。
+
+宿主点击评论卡片时同时设置此 prop，并按需调用 `handle.revealCommentAnchor(anchor)`；点击网格锚点时通过 `onCommentAnchorsClick` 的候选列表确定评论后设置。多个候选继续由宿主选择。宿主负责超时和 ACL，在关闭、解决、撤权或超时后置 `null`。仅传入背景锚点不滚动、不改选区；读取和编辑模式均可用。`activeCommentId` 仍控制边框，`commentMarkers` 仍控制可点击标记，两者不自动设置/清除背景；关闭抽屉只移除标记时，宿主应明确决定是否保留这次短暂背景。参见 `examples/doca-comments.tsx` 中 1500ms 的宿主定时器。
+
+背景层遵循原生隐藏行列、冻结、滚动和缩放，位于文字与边框之下，不修改单元格样式、正文、协同更新、持久化或撤销。不修改永久锚点、schema 6、baseline、epoch、checkpoint 或 pending 更新。宿主通过官方 npm 的 `@smartdoca/sheet@0.2.14` 接入；本包发布不修改 Doca pin/lockfile，宿主源码接入和契约正式同步由宿主另行完成。
+
 附件预览通过 `SpreadsheetEditor.onAttachmentPreview` 接入：
 
 ```tsx

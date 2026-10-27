@@ -44,7 +44,9 @@ function App() {
 }
 
 const acceptanceRoom = new URLSearchParams(location.search).get('host-test')
-if (new URLSearchParams(location.search).has('filter-range-test')) {
+if (new URLSearchParams(location.search).has('comment-highlight-test')) {
+  void import('../examples/comment-highlight-acceptance').then(m => m.mountCommentHighlightAcceptance(document.getElementById('root')!))
+} else if (new URLSearchParams(location.search).has('filter-range-test')) {
   void import('./filter-range-test').then(m=>m.mountFilterRangeTest())
 } else if (new URLSearchParams(location.search).has('lifecycle-test')) {
   void import('./lifecycle-test').then(m=>m.mountLifecycleTest())

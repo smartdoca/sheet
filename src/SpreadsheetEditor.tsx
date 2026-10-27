@@ -70,6 +70,7 @@ import type {
   WorkbookSnapshot,
 } from './types'
 import { CommentRegionLayer, hitCommentRegions, resolveCommentRegions, type ResolvedComment } from './commentRegions'
+import { CommentHighlightLayer, resolveCommentHighlight } from './commentHighlight'
 import { PresenceRegionLayer } from './presenceRegions'
 import { CellObjects } from './officeSurface'
 import { OfficeToolbar } from './OfficeToolbar'
@@ -105,6 +106,9 @@ export interface SpreadsheetEditorProps {
   commentMarkers?: SpreadsheetCommentMarker[]
   renderCommentMarker?: SpreadsheetCommentMarkerRenderer
   activeCommentId?: string | null
+  /** Transient native background for a current stable anchor. Null/omission clears it.
+   * Requires collaboration.resolveCellAnchorRanges; never selects, scrolls or writes. */
+  commentHighlightAnchor?: SpreadsheetCommentAnchor | null
   onCommentAnchorClick?: (marker: SpreadsheetCommentMarker, range: SpreadsheetCellRange, event: import('./types').SpreadsheetCommentAnchorEvent) => void
   /** Always receives all overlaps; no implicit first-comment activation. */
   onCommentAnchorsClick?: (event: import('./types').SpreadsheetCommentAnchorEvent) => void
@@ -310,6 +314,7 @@ export const SpreadsheetEditor = forwardRef<
     onCommentAnchorClick,
     onCommentAnchorsClick,
     activeCommentId,
+    commentHighlightAnchor,
     menus,
     showInsertToolbar = true,
     onInsertAttachment,
@@ -392,6 +397,8 @@ export const SpreadsheetEditor = forwardRef<
   const cellRenderersRef = useRef(cellRenderers)
   const commentMarkersRef = useRef(commentMarkers)
   const commentRegionsRef = useRef<ResolvedComment[]>([])
+  const commentHighlightAnchorRef = useRef(commentHighlightAnchor)
+  const commentHighlightRangesRef = useRef<SpreadsheetCellRange[]>([])
   const activeCommentIdRef = useRef(activeCommentId)
   const onCommentAnchorsClickRef = useRef(onCommentAnchorsClick)
   const menusRef = useRef(menus)
@@ -414,6 +421,7 @@ export const SpreadsheetEditor = forwardRef<
   cellRenderersRef.current = cellRenderers
   commentMarkersRef.current = commentMarkers
   activeCommentIdRef.current = activeCommentId
+  commentHighlightAnchorRef.current = commentHighlightAnchor
   onCommentAnchorsClickRef.current = onCommentAnchorsClick
   menusRef.current = menus
   renderCommentMarkerRef.current = renderCommentMarker
@@ -1001,6 +1009,8 @@ export const SpreadsheetEditor = forwardRef<
   }, [])
 
   const refreshResolvedCommentMarkers = useCallback(() => {
+    commentHighlightRangesRef.current = resolveCommentHighlight(commentHighlightAnchorRef.current,
+      collaborationRef.current?.resolveCellAnchorRanges?.bind(collaborationRef.current))
     const next = new Map<string, Array<{ marker: SpreadsheetCommentMarker; range: SpreadsheetCellRange }>>()
     commentRegionsRef.current = resolveCommentRegions(commentMarkersRef.current, anchor => collaborationRef.current?.resolveCellAnchorRanges?.(anchor) ?? collaborationRef.current?.resolveCellAnchor?.(anchor) ?? null)
     commentRegionsRef.current.forEach(({ marker, range }) => {
@@ -1676,6 +1686,8 @@ export const SpreadsheetEditor = forwardRef<
         canvasReadyRef.current = true
         const commentLayer = runtime.univerAPI.registerSheetMainExtension(workbookId, new CommentRegionLayer(() => commentRegionsRef.current, () => activeCommentIdRef.current))
         customComponentDisposers.push(() => commentLayer.dispose())
+        const highlightLayer = runtime.univerAPI.registerSheetMainExtension(workbookId, new CommentHighlightLayer(() => commentHighlightRangesRef.current))
+        customComponentDisposers.push(() => highlightLayer.dispose())
         const presenceLayer = runtime.univerAPI.registerSheetMainExtension(workbookId, new PresenceRegionLayer(() => readOnlyRef.current ? [] : remoteSelectionsRef.current))
         customComponentDisposers.push(() => presenceLayer.dispose())
         refreshResolvedCommentMarkers()
@@ -1743,6 +1755,7 @@ export const SpreadsheetEditor = forwardRef<
       }
       refreshHostMenusRef.current = () => undefined
       commentRegionsRef.current = []
+      commentHighlightRangesRef.current = []
     }
   }, [runtimeGeneration, workbookId])
 
@@ -1762,7 +1775,7 @@ export const SpreadsheetEditor = forwardRef<
   useEffect(() => {
     refreshResolvedCommentMarkers()
     refreshAllSheets()
-  }, [commentMarkers, activeCommentId, refreshResolvedCommentMarkers])
+  }, [commentMarkers, activeCommentId, commentHighlightAnchor, refreshResolvedCommentMarkers])
 
   useEffect(() => { refreshHostMenusRef.current() }, [menus, readOnly])
 
