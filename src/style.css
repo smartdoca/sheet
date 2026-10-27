@@ -10,6 +10,9 @@
 }
 
 .uos-editor--without-header { grid-template-rows: minmax(0, 1fr); }
+/* Native notices belong to this embedded editor. Viewport-fixed notices can
+ * sit behind a host header outside an isolated editor's stacking context. */
+.uos-editor [data-sonner-toaster] { position: absolute; }
 .uos-editor--with-insert-toolbar { grid-template-rows: auto auto minmax(0, 1fr); }
 .uos-editor--without-header.uos-editor--with-insert-toolbar { grid-template-rows: auto minmax(0, 1fr); }
 .uos-editor__insert-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 14px; min-width: 0; color: #334155; background: #fff; border-bottom: 1px solid #e5e7eb; }
