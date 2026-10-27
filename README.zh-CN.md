@@ -40,6 +40,7 @@ export function Sheet({ id }: { id: string }) {
 | `currentSessionId` | `string` | 当前标签的会话。同一用户的其他标签仍然可见。 |
 | `commentMarkers` | `SpreadsheetCommentMarker[]` | 宿主拥有的评论，锚在稳定位置上。 |
 | `activeCommentId` | `string \| null` | 高亮的评论。 |
+| `commentHighlightAnchor` | `SpreadsheetCommentAnchor \| null` | 临时原生背景，置空或省略即清除。 |
 | `onCommentAnchorClick` | function | 激活了一个标记。 |
 | `onCommentAnchorsClick` | function | 重叠的全部标记，不会默认选中第一条。 |
 | `onSelectionChange` | function | 本地单元格选区。 |
@@ -58,6 +59,12 @@ export function Sheet({ id }: { id: string }) {
 `initialRows`、`initialColumns`、`autoFitContent`、菜单、图片上传和行内操作也在 `SpreadsheetEditorProps` 上。
 
 更新 props、只读或选区不能重建工作簿。
+
+## 评论区域临时背景
+
+向 `commentHighlightAnchor` 传入当前稳定 `SpreadsheetCommentAnchor`，绘制半透明黄色背景，覆盖空白单元格及排序拆分后的全部区域。依赖当前协同会话提供的 `resolveCellAnchorRanges`；已删除、失效或其他 epoch 的锚点不显示。它独立于 `activeCommentId` 和 `commentMarkers`，移除标记不会清除仍传入的背景锚点。
+
+背景位于文字和边框之下，跟随原生隐藏行列、滚动、缩放和冻结分区。阅读和编辑模式都可用，不改选区、不自动滚动、不改单元格样式，不进入撤销、快照或 Yjs。需要定位时单独调用 `revealCommentAnchor(anchor)`。宿主负责权限和时长：点击评论卡片或单个候选时设置锚点，在超时、关闭、解决或撤权时置 `null`；重叠候选由宿主选择，不默认使用第一条。包内不设定时器、不写存储。接法与宿主定时器示例见 `examples/doca-comments.tsx`。
 
 ## 个人缩放与默认单元格尺寸
 

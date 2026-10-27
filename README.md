@@ -42,6 +42,7 @@ export function Sheet({ id }: { id: string }) {
 | `currentSessionId` | `string` | This tab's session. Other tabs of the same user stay visible. |
 | `commentMarkers` | `SpreadsheetCommentMarker[]` | Host-owned comments on stable anchors. |
 | `activeCommentId` | `string \| null` | Highlighted comment. |
+| `commentHighlightAnchor` | `SpreadsheetCommentAnchor \| null` | Transient native background; null/omission clears it. |
 | `onCommentAnchorClick` | function | One marker was activated. |
 | `onCommentAnchorsClick` | function | Every overlapping marker. There is no implicit first-comment choice. |
 | `onSelectionChange` | function | Local cell selection. |
@@ -99,6 +100,26 @@ At 100%, new worksheets use 21.78 px rows and 87.12 px columns (10% larger than 
 In edit mode, the first image click selects it and the next click previews it, including inside the native cell draft. Readonly mode previews on the first click. `onImagePreview({drawingId, resource, cell})` receives the existing native drawing ID, `{id, kind: 'image', name}` and the zero-based workbook/sheet/cell location. The host resolves the stable resource ID and opens its viewer; no resolved URL is stored. Without a handler, the package uses the native image gallery. Replacing the callback or toggling readonly does not rebuild the editor. Callback errors reach `onError`; pending errors after disposal are ignored. Selection and preview do not commit the cell draft.
 
 `handle.getImageGallery()` returns detached `{drawingId, resource, placement, sheetId, cell}` entries for UUID-backed inline and floating images across the current workbook, including the active uncommitted draft. Entries follow sheet order, row, column, inline text order, then floating order; unanchored native floating images follow anchored images in their sheet (`cell: null`). Match the clicked occurrence using `drawingId` and its sheet/cell location: repeated uses of an asset remain separate entries. The getter neither writes content nor resolves URLs. Embedded BASE64 images have no host asset ID and are excluded. A custom runtime must implement this capability or the getter throws `IMAGE_GALLERY_UNSUPPORTED`.
+
+## Transient comment background
+
+Pass a current stable `SpreadsheetCommentAnchor` to `commentHighlightAnchor` to draw a translucent yellow background, including blank cells and all rectangles produced by sorting. It requires the collaboration adapter's `resolveCellAnchorRanges` (provided by the current Yjs session). Invalid/deleted/foreign-epoch targets render nothing. This prop is independent of `activeCommentId` and `commentMarkers`; removing markers does not clear a separately supplied highlight.
+
+The native layer follows hidden rows/columns, scrolling, zoom and frozen panes beneath text and borders. It works in readonly and edit mode without changing selection, scrolling, cell formats, undo, snapshots or Yjs. Use `revealCommentAnchor(anchor)` separately when navigation is desired. The host controls duration and comment ACL: set the prop to `null` on timeout, close, resolve or revocation. The package has no highlight timer or persistence.
+
+```tsx
+const [highlight, setHighlight] = useState<SpreadsheetCommentAnchor | null>(null);
+<SpreadsheetEditor
+  workbookId={id} collaboration={session}
+  commentHighlightAnchor={highlight}
+  onCommentAnchorsClick={event => {
+    if (event.candidates.length === 1) setHighlight(event.candidates[0].marker.anchor);
+    else openCommentCandidates(event); // Host chooses an overlapping comment.
+  }}
+/>;
+// Comment card: setHighlight(marker.anchor); editor.current?.revealCommentAnchor(marker.anchor).
+// Clear: setHighlight(null). See examples/doca-comments.tsx for a host-owned timer.
+```
 
 ## Collaboration
 
