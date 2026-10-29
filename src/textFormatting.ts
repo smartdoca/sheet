@@ -13,6 +13,7 @@ import {attachNativeFilterRender} from './nativeFilterRender'
 import {attachNativeFilterRefresh} from './nativeFilterRefresh'
 import {attachNativeDropdownDelete} from './nativeDropdownDelete'
 import {attachNativeAutoHeightDisposal} from './nativeAutoHeightDisposal'
+import {attachNativeFreezeScroll} from './nativeFreezeScroll'
 
 /** Pure, sparse run query; never converts the draft back to a sheet cell. */
 export function queryTextStyles(body: IDocumentBody, start: number, end: number, defaults: ITextStyle = {}) {
@@ -51,6 +52,7 @@ export class TextFormattingPlugin extends Plugin {
   private autoHeightDisposal?:ReturnType<typeof attachNativeAutoHeightDisposal>
   constructor(private readonly config:Config, protected readonly _injector:Injector){super()}
   override onReady() {
+    this.disposeWithMe(attachNativeFreezeScroll(this._injector))
     const media=attachInlineMediaRender(this._injector,this.config.container,{preview:this.config.imagePreview,labels:this.config.imageLabels});this.config.bindImages?.(id=>media.refreshImages(id));this.disposeWithMe(media)
     this.derivedLayout=attachDerivedAutoHeight(this._injector)
     this.disposeWithMe(this.derivedLayout)

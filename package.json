@@ -12,6 +12,7 @@
     "examples",
     "tests/comment-browser.cua.js",
     "tests/comment-highlight-browser.cua.js",
+    "tests/frozen-edit-browser.cua.js",
     "tests/toolbar-browser.cua.js",
     "tests/office-browser.cua.js",
     "tests/xlsx-browser.cua.js",
