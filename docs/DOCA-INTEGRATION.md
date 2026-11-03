@@ -104,3 +104,9 @@ const session = await createExlsxCollaborationSession({
 个人 zoom 不进入内容事务、undo、outbox 或自动保存。原生运行时 `zoomRatio` 是显示投影；包提供的 `getSnapshot`、保存、导出及协同 snapshot 回调恢复原始 zoom 字段（含缺省），从而不把偏好带入快照或 XLSX。`getRuntime` 仍暴露当前原生显示状态。自定义 runtime 缺少所需原生视图操作会报告 `VIEW_PREFERENCES_UNSUPPORTED`，非法偏好报告 `INVALID_VIEW_PREFERENCES`。两项 props 都省略保持既有原生行为；显式启用后移除受控值不重置本次个人比例，移除回调停止通知。
 
 测试使用隔离合成文档和真实 rc.19 不可变 fixture。包验收与 Doca 网站/存储验收分别记录；包内隔离示例不是生产身份、ACL 或 durable ACK 服务的替代证明。
+
+## 当前用户提及样式（0.2.16）
+
+宿主通过 `SpreadsheetEditor.currentUserId?: string | null` 传入当前用户的稳定业务 ID。默认运行时只对原生 `type: 'user'` 原子节点按 `refId` 精确匹配：匹配项蓝底白字，其他用户为蓝字；所有用户提及都不显示下划线。网格、单元格草稿和公式栏使用同一绘制规则；普通链接、附件和文档引用维持各自样式。只读也支持显示。
+
+变更、清空或省略身份时只重绘现有编辑器，不重建工作簿，不执行内容命令，也不写入单元格、剪贴板、撤销记录、Yjs、历史或 XLSX。用户目录、登录、卡片和权限仍归宿主。自定义运行时可使用 `RuntimeFactoryContext.userMentions.currentUserId()` 获取最新视图身份，并实现 `SpreadsheetRuntime.refreshUserMentions()` 响应重绘；这是运行时渲染扩展，不是数据格式或旧版 API 适配。原生 schema 6 和已有节点数据不变。

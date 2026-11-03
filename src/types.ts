@@ -110,6 +110,8 @@ export interface SpreadsheetRuntime {
   whenRendered?(signal: AbortSignal): Promise<void>
   getUndoRedoState?(): {canUndo:boolean;canRedo:boolean}
   refreshInlineImages?(assetId?:string):void
+  /** Repaint viewer-specific user mentions without commands or content writes. */
+  refreshUserMentions?():void
   getImageGallery?(floating:readonly import('./floatingModel').FloatingObjectView[]):import('./inlineTypes').SpreadsheetImageGalleryItem[]
   formatPainter?:SpreadsheetFormatPainter
   /** Switches Univer UI copy without recreating the workbook or plugins. */
@@ -308,6 +310,8 @@ export interface RuntimeFactoryContext {
     open(event:import('./inlineTypes').SpreadsheetImagePreviewEvent):void|Promise<void>|false
     onError(error:Error):void
   }
+  /** Transient viewer identity; custom runtimes own their native presentation. */
+  userMentions?: {currentUserId():string|null}
   toolbarLayout: SpreadsheetToolbarLayout
   /** Stable protocol capabilities; no host-specific native command/DOM filtering. */
   capabilities?: ExlsxCapabilities
