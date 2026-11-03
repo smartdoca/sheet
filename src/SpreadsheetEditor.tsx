@@ -102,6 +102,8 @@ export interface SpreadsheetEditorProps {
   remoteSelections?: SpreadsheetRemoteSelection[]
   /** Current server session; only this session is excluded, not other tabs of the same user. */
   currentSessionId?: string
+  /** Viewer identity for native user mention colors; never saved to content. */
+  currentUserId?: string | null
   /** Host-owned comments. The editor only resolves and renders their stable anchors. */
   commentMarkers?: SpreadsheetCommentMarker[]
   renderCommentMarker?: SpreadsheetCommentMarkerRenderer
@@ -309,6 +311,7 @@ export const SpreadsheetEditor = forwardRef<
     cellRenderers,
     remoteSelections = EMPTY_REMOTE_SELECTIONS,
     currentSessionId,
+    currentUserId,
     commentMarkers = [],
     renderCommentMarker,
     onCommentAnchorClick,
@@ -363,6 +366,8 @@ export const SpreadsheetEditor = forwardRef<
   const fileInputRef = useRef<HTMLInputElement>(null)
   const cellImageInputRef = useRef<HTMLInputElement>(null)
   const runtimeRef = useRef<SpreadsheetRuntime | null>(null)
+  const currentUserIdRef = useRef(currentUserId)
+  currentUserIdRef.current = currentUserId
   const viewControllerRef = useRef<ReturnType<typeof createViewPreferencesController> | null>(null)
   const viewPreferencesRef = useRef(viewPreferences)
   const onViewPreferencesChangeRef = useRef(onViewPreferencesChange)
@@ -1296,6 +1301,7 @@ export const SpreadsheetEditor = forwardRef<
           locale,
           languagePack,
           resourceAdapter: effectiveResourceAdapter,
+          userMentions: {currentUserId:()=>currentUserIdRef.current??null},
           imagePreview:{
             readOnly:()=>readOnlyRef.current,
             open:event=>{const handler=onImagePreviewRef.current;return handler?handler(event):false},
@@ -1758,6 +1764,10 @@ export const SpreadsheetEditor = forwardRef<
       commentHighlightRangesRef.current = []
     }
   }, [runtimeGeneration, workbookId])
+
+  useEffect(() => {
+    runtimeRef.current?.refreshUserMentions?.()
+  }, [currentUserId])
 
   useEffect(() => {
     setEditorReadOnly(readOnly)

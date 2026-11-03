@@ -39,6 +39,7 @@ export function Sheet({ id }: { id: string }) {
 | `onAttachmentPreview` | `SpreadsheetAttachmentPreviewHandler` | Inline attachment label clicks, including readonly. The host opens the preview. |
 | `onImagePreview` | `SpreadsheetImagePreviewHandler` | Native inline image preview. The host checks access and opens its image viewer. |
 | `remoteSelections` | `SpreadsheetRemoteSelection[]` | Ephemeral selections. Identity and color come from the host session. |
+| `currentUserId` | `string \| null` | Viewer identity for native user mentions. Matching user nodes have a blue background and white text; all user mentions omit underlines. Live changes only repaint. |
 | `currentSessionId` | `string` | This tab's session. Other tabs of the same user stay visible. |
 | `commentMarkers` | `SpreadsheetCommentMarker[]` | Host-owned comments on stable anchors. |
 | `activeCommentId` | `string \| null` | Highlighted comment. |

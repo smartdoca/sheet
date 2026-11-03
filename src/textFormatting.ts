@@ -14,6 +14,7 @@ import {attachNativeFilterRefresh} from './nativeFilterRefresh'
 import {attachNativeDropdownDelete} from './nativeDropdownDelete'
 import {attachNativeAutoHeightDisposal} from './nativeAutoHeightDisposal'
 import {attachNativeFreezeScroll} from './nativeFreezeScroll'
+import {attachUserMentionRender} from './userMentionRender'
 
 /** Pure, sparse run query; never converts the draft back to a sheet cell. */
 export function queryTextStyles(body: IDocumentBody, start: number, end: number, defaults: ITextStyle = {}) {
@@ -42,7 +43,7 @@ export function queryTextStyles(body: IDocumentBody, start: number, end: number,
   return {style:style as IStyleData,mixed:[...mixed]}
 }
 
-type Config = {imagePreview?:RuntimeFactoryContext['imagePreview'];imageLabels():{loading:string;unavailable:string};bindPainter?(painter:NonNullable<SpreadsheetRuntime['formatPainter']>):void;bindImages?(refresh:(assetId?:string)=>void):void;bind(query: NonNullable<SpreadsheetRuntime['getTextFormatState']>):void;container:HTMLElement;bindNative(api:NonNullable<SpreadsheetRuntime['nativeText']>):void;bindHistory(query: NonNullable<SpreadsheetRuntime['getUndoRedoState']>):void}
+type Config = {userMentions?:RuntimeFactoryContext['userMentions'];bindUserMentions?(refresh:()=>void):void;imagePreview?:RuntimeFactoryContext['imagePreview'];imageLabels():{loading:string;unavailable:string};bindPainter?(painter:NonNullable<SpreadsheetRuntime['formatPainter']>):void;bindImages?(refresh:(assetId?:string)=>void):void;bind(query: NonNullable<SpreadsheetRuntime['getTextFormatState']>):void;container:HTMLElement;bindNative(api:NonNullable<SpreadsheetRuntime['nativeText']>):void;bindHistory(query: NonNullable<SpreadsheetRuntime['getUndoRedoState']>):void}
 /** Package-owned adapter for pinned native editor services, not a host event patch. */
 export class TextFormattingPlugin extends Plugin {
   static override pluginName='uos.text-formatting'
@@ -53,6 +54,8 @@ export class TextFormattingPlugin extends Plugin {
   constructor(private readonly config:Config, protected readonly _injector:Injector){super()}
   override onReady() {
     this.disposeWithMe(attachNativeFreezeScroll(this._injector))
+    const mentions=attachUserMentionRender(this._injector,()=>this.config.userMentions?.currentUserId()??null)
+    this.config.bindUserMentions?.(()=>mentions.refresh());this.disposeWithMe(mentions)
     const media=attachInlineMediaRender(this._injector,this.config.container,{preview:this.config.imagePreview,labels:this.config.imageLabels});this.config.bindImages?.(id=>media.refreshImages(id));this.disposeWithMe(media)
     this.derivedLayout=attachDerivedAutoHeight(this._injector)
     this.disposeWithMe(this.derivedLayout)

@@ -70,7 +70,7 @@ const enUSLocale = mergeLocales(
 )
 
 export const createDefaultSpreadsheetRuntime: SpreadsheetRuntimeFactory = ({
-  container, workbookId, locale, languagePack, resourceAdapter,imagePreview,toolbarLayout, capabilities, initialRows = 220, initialColumns = 26,
+  container, workbookId, locale, languagePack, resourceAdapter,imagePreview,userMentions,toolbarLayout, capabilities, initialRows = 220, initialColumns = 26,
 }) => {
   const localeKey = univerLocale(locale) === 'en-US' ? LocaleType.EN_US : LocaleType.ZH_CN
   const drawingPreset = UniverSheetsDrawingPreset()
@@ -112,9 +112,10 @@ export const createDefaultSpreadsheetRuntime: SpreadsheetRuntimeFactory = ({
   let nativeText: ReturnType<SpreadsheetRuntimeFactory>['nativeText']
   let formatPainter: ReturnType<SpreadsheetRuntimeFactory>['formatPainter']
   let getUndoRedoState = () => ({canUndo:false,canRedo:false})
+  let refreshUserMentions=()=>{}
   let refreshInlineImages=(_assetId?:string)=>{}
   let imageTranslator=createTranslator(locale,languagePack?.editor)
-  runtime.univer.registerPlugin(TextFormattingPlugin, {container,imagePreview,imageLabels:()=>({loading:imageTranslator('image.loading'),unavailable:imageTranslator('image.unavailable')}),bindPainter:(painter:typeof formatPainter)=>{formatPainter=painter},bindImages:(refresh:typeof refreshInlineImages)=>{refreshInlineImages=refresh},bindHistory:(query:typeof getUndoRedoState)=>{getUndoRedoState=query},bindNative:(api:typeof nativeText)=>{nativeText=api},bind:(query:typeof getTextFormatState)=>{getTextFormatState=query}})
+  runtime.univer.registerPlugin(TextFormattingPlugin, {container,imagePreview,userMentions,bindUserMentions:(refresh:()=>void)=>{refreshUserMentions=refresh},imageLabels:()=>({loading:imageTranslator('image.loading'),unavailable:imageTranslator('image.unavailable')}),bindPainter:(painter:typeof formatPainter)=>{formatPainter=painter},bindImages:(refresh:typeof refreshInlineImages)=>{refreshInlineImages=refresh},bindHistory:(query:typeof getUndoRedoState)=>{getUndoRedoState=query},bindNative:(api:typeof nativeText)=>{nativeText=api},bind:(query:typeof getTextFormatState)=>{getTextFormatState=query}})
   runtime.univer.registerPlugin(HostMenusPlugin, { bind: (update: typeof updateHostMenus) => { updateHostMenus = update }, onError: (error: unknown) => runtime.univerAPI.showMessage({ content: String(error) }) })
   const pendingGridlines = new Set<string>()
   let disposed = false
@@ -167,5 +168,5 @@ export const createDefaultSpreadsheetRuntime: SpreadsheetRuntimeFactory = ({
     const document=location?injector.get(IUniverInstanceService).getUnit<DocumentDataModel>(bridge.getCurrentEditorId(),UniverInstanceType.UNIVER_DOC)?.getSnapshot():undefined
     return collectImageGallery(workbook.save(),floating,location&&document?{cell:{workbookId:location.unitId,sheetId:location.sheetId,row:location.row,column:location.column},document}:undefined)
   }
-  return { ...runtime, applyLocale, whenRendered, getImageGallery, get formatPainter(){return formatPainter},refreshInlineImages:(assetId?:string)=>refreshInlineImages(assetId), get nativeText(){return nativeText}, getUndoRedoState:()=>getUndoRedoState(), getTextFormatState:()=>getTextFormatState(), updateHostMenus: (...args: Parameters<typeof updateHostMenus>) => updateHostMenus(...args) } as unknown as ReturnType<SpreadsheetRuntimeFactory>
+  return { ...runtime, refreshUserMentions:()=>refreshUserMentions(), applyLocale, whenRendered, getImageGallery, get formatPainter(){return formatPainter},refreshInlineImages:(assetId?:string)=>refreshInlineImages(assetId), get nativeText(){return nativeText}, getUndoRedoState:()=>getUndoRedoState(), getTextFormatState:()=>getTextFormatState(), updateHostMenus: (...args: Parameters<typeof updateHostMenus>) => updateHostMenus(...args) } as unknown as ReturnType<SpreadsheetRuntimeFactory>
 }
