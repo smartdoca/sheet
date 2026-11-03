@@ -52,7 +52,8 @@ export function attachUserMentionRender(injector:Injector,identity:()=>string|nu
         const point=this.extensionOffset.spanStartPoint,line=glyph.parent?.parent
         if(!width||!point||!line)return
         ctx.save();ctx.fillStyle='#3370ff';ctx.beginPath()
-        ctx.roundRect(point.x-2,point.y-1,width+4,line.contentHeight+2,3)
+        const height=line.contentHeight+2,padding=height*0.15
+        ctx.roundRect(point.x-padding,point.y-1,width+padding*2,height,height/2)
         ctx.fill();ctx.restore()
       }
       document.register(local)
