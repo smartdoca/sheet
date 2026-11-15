@@ -266,6 +266,7 @@
   border: 0;
   border-right: 1px solid #d5dce0;
   border-bottom: 1px solid #d5dce0;
+  border-radius: 0;
   cursor: pointer;
 }
 .uos-editor__select-all:hover { color: #176b3a; background: #eaf3ee; }
