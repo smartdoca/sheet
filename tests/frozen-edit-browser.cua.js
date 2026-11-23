@@ -60,6 +60,43 @@ export async function frozenEditAcceptance(tab, capture) {
   return { name: initial.name, zoom: initial.zoom, results, readonlyModes: ['double-click', 'F2', 'direct-key'], writes: final.writes, updates: final.updates, created: final.created, ready: final.ready, errors: final.errors }
 }
 
+export async function cellDraftHistoryShortcuts(tab) {
+  const check = (value, message) => { if (!value) throw new Error(message) }
+  await tab.playwright.getByLabel('冻结验收计数', { exact: true }).filter({ hasText: 'prepared 1' }).waitFor({ state: 'visible' })
+  const initial = await readFrozenEdit(tab), rect = initial.target
+  assertFrozenTarget(initial)
+  const cell = value => value.model.sheets.s.cellData?.[initial.row]?.[initial.column]
+  const modifier = await tab.playwright.evaluate(() => /Mac/.test(navigator.platform) ? 'Meta' : 'Control')
+  await tab.click([rect.x + Math.min(rect.width / 2, 20), rect.y + Math.min(rect.height / 2, 10)], { clickCount: 2 })
+  await tab.pressKey(null, 'q')
+  const typed = await readFrozenEdit(tab), text = typed.draft?.text
+  check(text?.endsWith('q') && typed.writes === 0, 'Native text draft is local')
+  const steps = [
+    [`${modifier}+z`, text.slice(0, -1)],
+    [`${modifier}+Shift+z`, text],
+    [`${modifier}+z`, text.slice(0, -1)],
+    [`${modifier}+y`, text],
+  ]
+  for (const [key, expected] of steps) {
+    await tab.pressKey(null, key)
+    const current = await readFrozenEdit(tab)
+    check(current.draft?.text === expected && current.writes === 0 && JSON.stringify(current.model) === JSON.stringify(initial.model), `${key} edits only the native draft`)
+  }
+  await tab.pressKey(null, 'Enter')
+  await tab.playwright.getByLabel('冻结验收计数', { exact: true }).filter({ hasText: 'writes 1 ·' }).waitFor({ state: 'visible' })
+  const committed = await readFrozenEdit(tab)
+  check(!committed.draft && JSON.stringify(committed.model) !== JSON.stringify(initial.model), 'Enter commits one cell edit')
+  await tab.pressKey(null, `${modifier}+z`)
+  await tab.playwright.getByLabel('冻结验收计数', { exact: true }).filter({ hasText: 'writes 2 ·' }).waitFor({ state: 'visible' })
+  const undone = await readFrozenEdit(tab)
+  check(cell(undone)?.v === cell(initial)?.v, 'Sheet undo restores the committed value')
+  await tab.pressKey(null, `${modifier}+Shift+z`)
+  await tab.playwright.getByLabel('冻结验收计数', { exact: true }).filter({ hasText: 'writes 3 ·' }).waitFor({ state: 'visible' })
+  const redone = await readFrozenEdit(tab)
+  check(cell(redone)?.v === cell(committed)?.v && redone.errors.length === 0, 'Sheet redo restores the committed value')
+  return { draftShortcuts: steps.map(([key]) => key), draftWrites: 0, committedWrites: redone.writes, errors: redone.errors }
+}
+
 const check = (value, message) => { if (!value) throw new Error(message) }
 const button = (tab, name) => tab.playwright.getByRole('button', { name, exact: true })
 async function waitPeer(tab, count) {

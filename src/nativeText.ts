@@ -1,4 +1,4 @@
-import { EDITOR_ACTIVATED, IContextService, ICommandService, IUniverInstanceService, UniverInstanceType, CommandType, JSONX, TextX, TextXActionType, getBodySlice, type IDocumentData, type DocumentDataModel, type Injector, type Workbook } from '@univerjs/core'
+import { EDITOR_ACTIVATED, IContextService, ICommandService, IUniverInstanceService, UniverInstanceType, CommandType, JSONX, TextX, TextXActionType, UndoCommand, RedoCommand, getBodySlice, type IDocumentData, type DocumentDataModel, type Injector, type Workbook } from '@univerjs/core'
 import { DeviceInputEventType, IRenderManagerService, Vector2 } from '@univerjs/engine-render'
 import { DocSelectionManagerService } from '@univerjs/docs'
 import { BreakLineCommand, ReplaceSelectionCommand, DocSelectionRenderService } from '@univerjs/docs-ui'
@@ -144,6 +144,22 @@ export function createNativeText(injector: Injector, container: HTMLElement) {
     id:BreakLineCommand.id,binding:KeyCode.ENTER|MetaKeys.SHIFT,priority:1000,
     preconditions:()=>{const state=api.getState();return Boolean(state&&!state.formula&&!state.composing)},
   }))
+  // Univer's shared history shortcuts exclude an active cell editor. Route the
+  // same native commands to its draft history while the editor owns focus.
+  const ownsNativeEditor=()=>{
+    const active=document.activeElement
+    return Boolean(active?.getAttribute('data-u-comp')==='editor'&&container.contains(active))
+  }
+  const ownsDraftHistory=()=>{
+    const state=api.getState()
+    return Boolean(ownsNativeEditor()&&state&&!state.composing)
+  }
+  const shortcuts=injector.get(IShortcutService)
+  subs.push(shortcuts.registerShortcut({id:UndoCommand.id,binding:KeyCode.Z|MetaKeys.CTRL_COMMAND,priority:1000,preconditions:ownsDraftHistory}))
+  subs.push(shortcuts.registerShortcut({id:RedoCommand.id,binding:KeyCode.Y|MetaKeys.CTRL_COMMAND,priority:1000,preconditions:ownsDraftHistory}))
+  // Cmd/Ctrl+Shift+Z is the usual redo gesture in editors. Outside the draft,
+  // the existing command interceptor sends it to collaborative sheet history.
+  subs.push(shortcuts.registerShortcut({id:RedoCommand.id,binding:KeyCode.Z|MetaKeys.CTRL_COMMAND|MetaKeys.SHIFT,priority:1000,preconditions:()=>ownsNativeEditor()&&!composing}))
   // Univer's hyperlink hover service filters out CUSTOM ranges. Resolve our
   // atomic ranges against native glyph geometry without changing their schema.
   function hitNode(event: MouseEvent): Omit<SpreadsheetInlineNodeEvent, 'phase'> | null {
