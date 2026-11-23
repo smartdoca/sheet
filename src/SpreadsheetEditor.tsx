@@ -30,6 +30,7 @@ import {isFormulaProjection} from './transactionOrigin'
 import { sanitizeWorkbookSnapshot } from './snapshot'
 import { DEFAULT_WORKSHEET_DIMENSIONS } from './worksheetDefaults'
 import { createViewPreferencesController } from './nativeViewPreferences'
+import { attachNativeRejectionReporter } from './nativeRejectionReporter'
 import type { SpreadsheetViewPreferences } from './preferences'
 import { operationForNativeCommand, type ExlsxOperation } from './capabilities'
 import { snapshotToXlsx, xlsxToSnapshot } from './xlsx'
@@ -1621,6 +1622,16 @@ export const SpreadsheetEditor = forwardRef<
           saveTimerRef.current = setTimeout(() => void handleRef.current.save(), autoSaveDelayRef.current)
         })
         disposeCommandListener = () => commandListener.dispose()
+        // Engine internals fire executeCommand without awaiting it, so a crash
+        // inside a command handler escapes as an unhandled rejection and the
+        // gesture looks dead. Surface it once, correlated with a local command.
+        const rejectionReporter = attachNativeRejectionReporter(
+          {
+            onCommandExecuted: (listener) => events.addEvent('CommandExecuted', (command) => listener(command, command.options as { fromCollab?: boolean; fromChangeset?: boolean } | undefined)),
+          },
+          () => runtime.univerAPI.showMessage({ content: tRef.current('sheet.commandRejected'), type: 'warning', duration: 5000 }),
+        )
+        customComponentDisposers.push(() => rejectionReporter.dispose())
 
         if (collaborationRef.current) {
           const cleanup = await collaborationRef.current.connect({
