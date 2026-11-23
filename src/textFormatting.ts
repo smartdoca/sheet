@@ -13,6 +13,7 @@ import {attachNativeFilterRender} from './nativeFilterRender'
 import {attachNativeFilterRefresh} from './nativeFilterRefresh'
 import {attachNativeDropdownDelete} from './nativeDropdownDelete'
 import {attachNativeAutoHeightDisposal} from './nativeAutoHeightDisposal'
+import {attachNativeAutoHeightGuard} from './nativeAutoHeightGuard'
 import {attachNativeFreezeScroll} from './nativeFreezeScroll'
 import {attachUserMentionRender} from './userMentionRender'
 
@@ -64,6 +65,7 @@ export class TextFormattingPlugin extends Plugin {
     this.disposeWithMe(attachNativeFilterRefresh(this._injector))
     this.disposeWithMe(attachNativeDropdownDelete(this._injector))
     this.autoHeightDisposal=attachNativeAutoHeightDisposal(this._injector);this.disposeWithMe(this.autoHeightDisposal)
+    this.disposeWithMe(attachNativeAutoHeightGuard(this._injector))
     const native=createNativeText(this._injector,this.config.container)
     this.disposeWithMe(attachNativeClipboard(this._injector,native.api))
     const painter=attachFormatPainter(this._injector);this.config.bindPainter?.(painter);this.disposeWithMe(painter)

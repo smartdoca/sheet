@@ -91,6 +91,7 @@ const MESSAGES: ReadonlyArray<readonly [string, string, string]> = [
   ['workbook.actions', '工作簿操作', 'Workbook actions'],
   ['workbook.loading', '正在加载工作簿…', 'Loading workbook…'],
   ['workbook.loadFailed', '工作簿加载失败：{message}', 'Failed to load workbook: {message}'],
+  ['sheet.commandRejected', '本次操作未能生效：表格引擎内部错误，详情见控制台', 'The last action did not apply due to an internal spreadsheet engine error; details are in the console'],
   ['save.autoOn', '自动保存已开启', 'Autosave is on'],
   ['save.waiting', '等待保存', 'Waiting to save'],
   ['save.dirty', '有未保存更改', 'Unsaved changes'],

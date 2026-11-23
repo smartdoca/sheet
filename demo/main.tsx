@@ -46,6 +46,8 @@ function App() {
 const acceptanceRoom = new URLSearchParams(location.search).get('host-test')
 if (new URLSearchParams(location.search).has('frozen-edit-test')) {
   void import('../examples/frozen-edit-acceptance').then(m => m.mountFrozenEditAcceptance(document.getElementById('root')!))
+} else if (new URLSearchParams(location.search).has('column-resize-test')) {
+  void import('../examples/column-resize-acceptance').then(m => m.mountColumnResizeAcceptance(document.getElementById('root')!))
 } else if (new URLSearchParams(location.search).has('comment-highlight-test')) {
   void import('../examples/comment-highlight-acceptance').then(m => m.mountCommentHighlightAcceptance(document.getElementById('root')!))
 } else if (new URLSearchParams(location.search).has('filter-range-test')) {
