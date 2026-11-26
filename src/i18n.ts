@@ -1,3 +1,5 @@
+import { additionalCatalogs } from './locales'
+
 const MESSAGES: ReadonlyArray<readonly [string, string, string]> = [
   ['locale.zh', '中文', '中文'],
   ['locale.en', 'English', 'English'],
@@ -326,25 +328,40 @@ export const enEditorMessages: Record<string, string> = catalog('en')
 export const zhCNEditorLocale = zhEditorMessages
 export const enUSEditorLocale = enEditorMessages
 
+const catalogs = { zh: zhEditorMessages, en: enEditorMessages, ...additionalCatalogs }
+export type EditorLocale = keyof typeof catalogs
+
 export const builtInEditorLocales: Record<string, Record<string, string>> = {
-  zh: zhEditorMessages,
-  en: enEditorMessages,
+  ...catalogs,
   'zh-CN': zhEditorMessages,
   'en-US': enEditorMessages,
 }
 
 export type EditorTranslator = (key: string, params?: Record<string, string | number>) => string
 
-/** An omitted locale stays Chinese. `zh` and `zh-*` stay Chinese. Any other code displays as English. */
-export function resolveLocale(locale?: string | null): 'zh' | 'en' {
-  const code = locale?.trim().toLowerCase()
+const univerLanguageTags = {
+  zh: 'zh-CN',
+  en: 'en-US',
+  'zh-Hant': 'zh-TW',
+  ja: 'ja-JP',
+  fr: 'fr-FR',
+  ko: 'ko-KR',
+  es: 'es-ES',
+  ru: 'ru-RU',
+} as const satisfies Record<EditorLocale, string>
+
+/** Omitted locale uses Chinese. Unknown locale codes use English. */
+export function resolveLocale(locale?: string | null): EditorLocale {
+  const code = locale?.trim().toLowerCase().replaceAll('_', '-')
   if (!code) return 'zh'
-  if (code === 'zh' || code.startsWith('zh-') || code.startsWith('zh_')) return 'zh'
-  return 'en'
+  if (/^zh-(hant|tw|hk|mo)(-|$)/.test(code)) return 'zh-Hant'
+  const primary = code.split('-')[0]
+  return Object.hasOwn(catalogs, primary) ? primary as EditorLocale : 'en'
 }
 
-export function intlLocale(locale?: string | null): 'zh-CN' | 'en' {
-  return resolveLocale(locale) === 'zh' ? 'zh-CN' : 'en'
+export function intlLocale(locale?: string | null) {
+  const code = resolveLocale(locale)
+  return code === 'zh' ? 'zh-CN' : code
 }
 
 function lookup(key: string, messages: Record<string, string> | undefined, catalogMessages: Record<string, string>) {
@@ -363,7 +380,7 @@ function interpolate(template: string, params?: Record<string, string | number>)
 }
 
 export function createTranslator(locale?: string | null, messages?: Record<string, string>): EditorTranslator {
-  const catalogMessages = resolveLocale(locale) === 'zh' ? zhEditorMessages : enEditorMessages
+  const catalogMessages = catalogs[resolveLocale(locale)]
   return (key, params) => {
     const form = params && typeof params.count === 'number' ? `${key}.${params.count === 1 ? 'one' : 'other'}` : undefined
     const template = (form ? lookup(form, messages, catalogMessages) : undefined) ?? lookup(key, messages, catalogMessages) ?? key
@@ -371,6 +388,6 @@ export function createTranslator(locale?: string | null, messages?: Record<strin
   }
 }
 
-export function univerLocale(locale?: string | null): 'zh-CN' | 'en-US' {
-  return resolveLocale(locale) === 'zh' ? 'zh-CN' : 'en-US'
+export function univerLocale(locale?: string | null) {
+  return univerLanguageTags[resolveLocale(locale)]
 }

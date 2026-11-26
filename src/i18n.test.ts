@@ -14,7 +14,7 @@ it('keeps Chinese and English catalogs on the same keys', () => {
   expect(enEditorMessages['locale.en']).toBe('English')
 })
 
-it('resolves omitted and Chinese codes to zh, and everything else to en', () => {
+it('resolves omitted, supported, regional and unknown locale codes', () => {
   expect(resolveLocale()).toBe('zh')
   expect(resolveLocale('')).toBe('zh')
   expect(resolveLocale('zh')).toBe('zh')
@@ -22,11 +22,14 @@ it('resolves omitted and Chinese codes to zh, and everything else to en', () => 
   expect(resolveLocale('zh_Hans')).toBe('zh')
   expect(resolveLocale('en')).toBe('en')
   expect(resolveLocale('en-US')).toBe('en')
-  expect(resolveLocale('fr')).toBe('en')
+  expect(resolveLocale('fr')).toBe('fr')
+  expect(resolveLocale('zh-TW')).toBe('zh-Hant')
+  expect(resolveLocale('ar')).toBe('en')
   expect(createTranslator()('action.save')).toBe('保存')
   expect(createTranslator('zh-CN')('action.save')).toBe('保存')
   expect(createTranslator('en-US')('action.save')).toBe('Save')
-  expect(createTranslator('fr')('action.save')).toBe('Save')
+  expect(createTranslator('fr')('action.save')).toBe('Enregistrer')
+  expect(createTranslator('ar')('action.save')).toBe('Save')
 })
 
 it('fills placeholders, selects plurals, and overrides individual keys', () => {

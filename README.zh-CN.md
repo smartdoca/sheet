@@ -47,7 +47,7 @@ export function Sheet({ id }: { id: string }) {
 | `onChange` | `(snapshot) => void` | 本地变更后的工作簿快照。 |
 | `onReady` | `(handle) => void` | 得到 `SpreadsheetEditorHandle`。 |
 | `onSaveStateChange` | function | 宿主保存状态。 |
-| `locale` | `SpreadsheetLocale` | `zh` 和 `zh-*` 为中文，其他代码为英文。省略时为中文。 |
+| `locale` | `SpreadsheetLocale` | `zh`, `en`, `zh-Hant`, `ja`, `fr`, `ko`, `es`, `ru`。缺省使用简体中文，未知代码使用英文。 |
 | `messages` | `Record<string, string>` | 替换单个文案键。 |
 | `autoSave` | `boolean` | 包内保存计时器。宿主负责持久化时保持关闭。 |
 | `showSaveState` | `boolean` | 宿主自己绘制保存状态时隐藏包内标记。 |
