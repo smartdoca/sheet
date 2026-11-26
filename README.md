@@ -50,7 +50,7 @@ export function Sheet({ id }: { id: string }) {
 | `onChange` | `(snapshot) => void` | Workbook snapshot after a local change. |
 | `onReady` | `(handle) => void` | Receives `SpreadsheetEditorHandle`. |
 | `onSaveStateChange` | function | Host save indicator. |
-| `locale` | `SpreadsheetLocale` | `zh` and `zh-*` stay Chinese. Any other code shows English. Omitted stays Chinese. |
+| `locale` | `SpreadsheetLocale` | `zh`, `en`, `zh-Hant`, `ja`, `fr`, `ko`, `es`, `ru`. Omitted uses Simplified Chinese. Unknown codes use English. |
 | `messages` | `Record<string, string>` | Replaces individual message keys. |
 | `autoSave` | `boolean` | Built-in save timer. Leave it off when the host owns persistence. |
 | `showSaveState` | `boolean` | Hides the package save badge when the host draws its own. |

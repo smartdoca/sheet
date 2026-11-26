@@ -1,37 +1,18 @@
 import { UniverSheetsConditionalFormattingPreset } from '@univerjs/preset-sheets-conditional-formatting'
-import UniverPresetSheetsConditionalFormattingZhCN from '@univerjs/preset-sheets-conditional-formatting/locales/zh-CN'
-import UniverPresetSheetsConditionalFormattingEnUS from '@univerjs/preset-sheets-conditional-formatting/locales/en-US'
 import { UniverSheetsCorePreset } from '@univerjs/preset-sheets-core'
-import UniverPresetSheetsCoreZhCN from '@univerjs/preset-sheets-core/locales/zh-CN'
-import UniverPresetSheetsCoreEnUS from '@univerjs/preset-sheets-core/locales/en-US'
 import { UniverSheetsDataValidationPreset } from '@univerjs/preset-sheets-data-validation'
-import UniverPresetSheetsDataValidationZhCN from '@univerjs/preset-sheets-data-validation/locales/zh-CN'
-import UniverPresetSheetsDataValidationEnUS from '@univerjs/preset-sheets-data-validation/locales/en-US'
 import { UniverSheetsDrawingPreset } from '@univerjs/preset-sheets-drawing'
-import UniverPresetSheetsDrawingZhCN from '@univerjs/preset-sheets-drawing/locales/zh-CN'
-import UniverPresetSheetsDrawingEnUS from '@univerjs/preset-sheets-drawing/locales/en-US'
 import { UniverSheetsFilterPreset } from '@univerjs/preset-sheets-filter'
-import UniverPresetSheetsFilterZhCN from '@univerjs/preset-sheets-filter/locales/zh-CN'
-import UniverPresetSheetsFilterEnUS from '@univerjs/preset-sheets-filter/locales/en-US'
 import { UniverSheetsFindReplacePreset } from '@univerjs/preset-sheets-find-replace'
-import UniverPresetSheetsFindReplaceZhCN from '@univerjs/preset-sheets-find-replace/locales/zh-CN'
-import UniverPresetSheetsFindReplaceEnUS from '@univerjs/preset-sheets-find-replace/locales/en-US'
 import { UniverSheetsHyperLinkPreset } from '@univerjs/preset-sheets-hyper-link'
-import UniverPresetSheetsHyperLinkZhCN from '@univerjs/preset-sheets-hyper-link/locales/zh-CN'
-import UniverPresetSheetsHyperLinkEnUS from '@univerjs/preset-sheets-hyper-link/locales/en-US'
 import { UniverSheetsNotePreset } from '@univerjs/preset-sheets-note'
-import UniverPresetSheetsNoteZhCN from '@univerjs/preset-sheets-note/locales/zh-CN'
-import UniverPresetSheetsNoteEnUS from '@univerjs/preset-sheets-note/locales/en-US'
 import { UniverSheetsSortPreset } from '@univerjs/preset-sheets-sort'
-import UniverPresetSheetsSortZhCN from '@univerjs/preset-sheets-sort/locales/zh-CN'
-import UniverPresetSheetsSortEnUS from '@univerjs/preset-sheets-sort/locales/en-US'
 import { UniverSheetsTablePreset } from '@univerjs/preset-sheets-table'
-import UniverPresetSheetsTableZhCN from '@univerjs/preset-sheets-table/locales/zh-CN'
-import UniverPresetSheetsTableEnUS from '@univerjs/preset-sheets-table/locales/en-US'
 import { LocaleService,IUniverInstanceService,UniverInstanceType,type DocumentDataModel } from '@univerjs/core'
 import {HoverManagerService,IEditorBridgeService} from '@univerjs/sheets-ui'
-import { createUniver, LocaleType, mergeLocales } from '@univerjs/presets'
-import { createTranslator,univerLocale } from './i18n'
+import { createUniver, LocaleType } from '@univerjs/presets'
+import { createTranslator } from './i18n'
+import { nativeLocale, nativeMessages } from './univer-locales'
 
 import type { SpreadsheetRuntimeFactory } from './types'
 import { createUniverImageIoService } from './resources'
@@ -53,26 +34,10 @@ import '@univerjs/preset-sheets-note/lib/index.css'
 import '@univerjs/preset-sheets-sort/lib/index.css'
 import '@univerjs/preset-sheets-table/lib/index.css'
 
-const zhCNLocale = mergeLocales(
-  UniverPresetSheetsCoreZhCN, UniverPresetSheetsConditionalFormattingZhCN,
-  UniverPresetSheetsDataValidationZhCN, UniverPresetSheetsDrawingZhCN,
-  UniverPresetSheetsFilterZhCN, UniverPresetSheetsFindReplaceZhCN,
-  UniverPresetSheetsHyperLinkZhCN, UniverPresetSheetsNoteZhCN,
-  UniverPresetSheetsSortZhCN, UniverPresetSheetsTableZhCN,
-)
-
-const enUSLocale = mergeLocales(
-  UniverPresetSheetsCoreEnUS, UniverPresetSheetsConditionalFormattingEnUS,
-  UniverPresetSheetsDataValidationEnUS, UniverPresetSheetsDrawingEnUS,
-  UniverPresetSheetsFilterEnUS, UniverPresetSheetsFindReplaceEnUS,
-  UniverPresetSheetsHyperLinkEnUS, UniverPresetSheetsNoteEnUS,
-  UniverPresetSheetsSortEnUS, UniverPresetSheetsTableEnUS,
-)
-
 export const createDefaultSpreadsheetRuntime: SpreadsheetRuntimeFactory = ({
   container, workbookId, locale, languagePack, resourceAdapter,imagePreview,userMentions,toolbarLayout, capabilities, initialRows = 220, initialColumns = 26,
 }) => {
-  const localeKey = univerLocale(locale) === 'en-US' ? LocaleType.EN_US : LocaleType.ZH_CN
+  const localeKey = nativeLocale(locale)
   const drawingPreset = UniverSheetsDrawingPreset()
   if (resourceAdapter) drawingPreset.plugins = drawingPreset.plugins.map(entry => {
     if (Array.isArray(entry) && entry[0].pluginName === 'UNIVER_DRAWING_PLUGIN') return [entry[0], {...entry[1], override: [createUniverImageIoService(resourceAdapter, workbookId)]}] as typeof entry
@@ -81,8 +46,8 @@ export const createDefaultSpreadsheetRuntime: SpreadsheetRuntimeFactory = ({
   const runtime = createUniver({
     locale: localeKey,
     locales: {
-      [LocaleType.ZH_CN]: mergeLocales(zhCNLocale, localeKey === LocaleType.ZH_CN ? languagePack?.univer ?? {} : {}),
-      [LocaleType.EN_US]: mergeLocales(enUSLocale, localeKey === LocaleType.EN_US ? languagePack?.univer ?? {} : {}),
+      [LocaleType.EN_US]: nativeMessages(LocaleType.EN_US),
+      [localeKey]: nativeMessages(localeKey, languagePack?.univer),
     },
     override: resourceAdapter ? [createUniverImageIoService(resourceAdapter, workbookId)] : [],
     presets: [
@@ -156,8 +121,8 @@ export const createDefaultSpreadsheetRuntime: SpreadsheetRuntimeFactory = ({
   const applyLocale = (nextLocale: string, pack?: typeof languagePack) => {
     imageTranslator=createTranslator(nextLocale,pack?.editor)
     const service = runtime.univer.__getInjector().get(LocaleService)
-    const key = univerLocale(nextLocale) === 'en-US' ? LocaleType.EN_US : LocaleType.ZH_CN
-    service.load({ [key]: mergeLocales(key === LocaleType.EN_US ? enUSLocale : zhCNLocale, pack?.univer ?? {}) })
+    const key = nativeLocale(nextLocale)
+    service.load({ [key]: nativeMessages(key, pack?.univer) })
     if (service.getCurrentLocale() !== key) service.setLocale(key)
   }
   const getImageGallery:NonNullable<ReturnType<SpreadsheetRuntimeFactory>['getImageGallery']>=floating=>{
